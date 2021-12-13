@@ -1,0 +1,148 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title>Instructions - Event Viewer</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="instructions.css" type="text/css" />
+</head>
+<body>
+<div id="header">
+<h1 class="title">Instructions - Event Viewer</h1>
+</div>
+<p>Most things on the page are clickable (text will be underlined when hovered over to show this).</p>
+<p>To start, click on an acronym in the Acronym Bar.</p>
+<h2 id="map">Map</h2>
+<p>Events are displayed on the map as round icons with colored lines to each country of origin of the delegates. The thickness of the line indicates how many delegates came from that location.</p>
+<p>Clicking the event icon fills in the Event, From and Attend Tabs for that event. Clicking the country line fills in the Attend Tab with delegates for that event from that location.</p>
+<h2 id="information-tabs">Information Tabs</h2>
+<p>Information tabs appear next to the map and contain text information about the events and people.</p>
+<h3 id="event-tab">Event Tab</h3>
+<p>Displays Acronym, Title and Extra Fields for an event.</p>
+<p>Clicking on the title fills in the Attend Tab for all delegates at the event.</p>
+<h3 id="from-tab">From Tab</h3>
+<p>A list of all the locations which delegates attended from.</p>
+<p>Clicking on the title fills in the Attent Tab for al delegates at the event.</p>
+<h3 id="attend-tab">Attend Tab</h3>
+<p>A list of delegates either for the whole event or only from a specific location.</p>
+<p>Clicking on a delegate will display their information in the Bio Tab. Clicking on the Event Title will add all delegates to the Sandbox.</p>
+<h2 id="bio-tab">Bio Tab</h2>
+<p>Biographical information about a delegate.</p>
+<p>Click on the delegate's name to add that delegate to the Sandbox.</p>
+<h3 id="control-tab">Control Tab</h3>
+<ul>
+<li><code>Reset map</code> Click here to reset the map to its initial center and zoom.</li>
+<li><code>Labels:</code> Turn map labels on or off</li>
+<li><code>Timeline:</code> Turn the timeline display on or off</li>
+<li><code>Loading:</code> Displays the data loading progress when the page is opened or refreshed.</li>
+</ul>
+<h2 id="timeline">Timeline</h2>
+<p>Shows the timeline over which the events took place with colored lines to indicate the position within the timeline.</p>
+<h2 id="acronym-bar">Acronym Bar</h2>
+<p>Shows the acronyms for the events.</p>
+<p>Click an Acronym to select or deselect them from the map; selected events are displayed in the Event, From and Attend Tabs.</p>
+<p>The ∅ icon deselects all events.</p>
+<h2 id="sandbox">Sandbox</h2>
+<p>Table of people with the events they attended marked. Add people to the Sandbox by clicking the name in the Bio Tab or the event Title in the Attend Tab.</p>
+<p>Clicking a name in the sandbox fills in the Bio tab. Rows can be moved up, down or to the top or bottom; the row can be deleted or all rows to the bottom of the table deleted.</p>
+<h1 id="data-sheets">Data Sheets</h1>
+<p>The visualisation is driven by data held Google Spreadsheets or loaded from JSON data. Each sheet must have a first row which consists only of Field Names. Any field names starting with a lower case letter will be ignored. There are fields which must appear in some sheets and also extra fields which may appear.</p>
+<p>Any value which starts with an ! is treated as blank. Any field name surrounded with [ ... ] will be included as a non-compulsory field but the field name will not be shown. (This can be used for images and captions, for example.)</p>
+<p>Fields which contain a URL ending with .png, .jpg, .gif etc will be displayed as inline images. Other URLs will be displayed as clickable links.</p>
+<p>The different sheets within the Google Spreadsheets are:</p>
+<h2 id="people">People</h2>
+<p>Compulsory Fields are:</p>
+<ul>
+<li><code>UID</code> A unique id for each person.</li>
+<li><code>Last Name</code> A person's last name - delegates are sorted by this field.</li>
+<li><code>First Name</code> A person's first name (may be blank).</li>
+<li><code>Origin</code> The location of origin for the person.</li>
+</ul>
+<p>Any other fields starting with a capital letter will be listed, in order, in the Bio Tab.</p>
+<h2 id="events">Events</h2>
+<p>Fields are:</p>
+<ul>
+<li><code>Acronym</code> A unique id for each event.</li>
+<li><code>Title</code> The title or name of each event.</li>
+<li><code>Location</code> The location of the event.</li>
+<li><code>Start</code> The date the event started.</li>
+<li><code>Color</code> The color of the event lines on the map (can be blank in which case a color will be allocated based on Start date). Color names can be hex values or names listed on <a href="https://www.w3schools.com/colors/colors_names.asp" class="uri">https://www.w3schools.com/colors/colors_names.asp</a></li>
+</ul>
+<p>Any other fields starting with a capital letter will be displayed as part of the event information.</p>
+<h2 id="peopleatevents">PeopleAtEvents</h2>
+<p>This table links people with all the events they attended.</p>
+<ul>
+<li><code>UID</code> Id for the person.</li>
+<li><code>Acronym</code> Id for the event.</li>
+</ul>
+<p>Any other fields are ignored.</p>
+<h2 id="locations">Locations</h2>
+<p>This table gives the lat, lng coordinates for locations referenced in the People and Events tables. Fields are:</p>
+<ul>
+<li><code>Place</code> Name of location.</li>
+<li><code>Lat</code> Latitude co-ordinate.</li>
+<li><code>Lng</code> Longitute co-ordinate.</li>
+</ul>
+<p>All other fields are ignored.</p>
+<h2 id="parameters">Parameters</h2>
+<p>The parameters configure the way the data is displayed.</p>
+<h3 id="title">title</h3>
+<p>Displayed in the window title bar.</p>
+<h3 id="header">header</h3>
+<p>Displayed at the start of the page (can be in HTML).</p>
+<h3 id="footer">footer</h3>
+<p>Displayed at the end of the page (can be any HTML).</p>
+<h3 id="initlat-initlng-initzoom">initLat, initLng, initZoom</h3>
+<p>The initial latitude, longitute and zoom of the map (also used when Reset Map is clicked).</p>
+<h3 id="startyear-finishyear-labelyear">startYear, finishYear, labelYear</h3>
+<p>The beginning and end of the time line and the intervals which labels appear.</p>
+<h3 id="linkwidth">linkWidth</h3>
+<p>Width of link connecting timelines.</p>
+<h3 id="lineopacity">lineOpacity</h3>
+<p>Floating point number for the opacity ranging from 0 (invisible) to 1 (opaque).</p>
+<h3 id="lineminwidth-linemaxwidth">lineMinWidth, lineMaxWidth</h3>
+<p>Minimum an maximum line widths for location connecting lines on the map.</p>
+<h3 id="timeline-1">timeline</h3>
+<p>Whether the timeline is displayed.</p>
+<h3 id="labeled">labeled</h3>
+<p>Whether the map has country names labeled. (Only applies to Google maps not tile servers.)</p>
+<h3 id="watercolor-landcolor">waterColor, landColor</h3>
+<p>Color. Could be a named color or in the format #RRGGBB where RR, GG and BB are hex digits. Only applies to Google maps not tile servers.</p>
+<h3 id="googlekey">googleKey</h3>
+<p>Set a Google API key to load data from a Google sheet or load Google map grid layer.</p>
+<h3 id="tilelayer-attribution">tileLayer, attribution</h3>
+<p>The URL of a tile server (like Open Street Map) and the attribution which should be applied to the map. Most tile servers require some kind of copyright attribution as part of their terms of use.</p>
+<h1 id="loading">Loading</h1>
+<p>Data may be loaded into the page in various ways. The Javascript file local.js is loaded automatically.</p>
+<h2 id="google-spreadsheet">Google Spreadsheet</h2>
+<p>To read a Google spreadsheet - you need to generate a valid Google API key. This can be assigned in the local.js file, or passed as a query string after the URL.</p>
+<p>The key can be generated through the following URLs:</p>
+<ul>
+<li><a href="https://console.cloud.google.com/apis/credentials" class="uri">https://console.cloud.google.com/apis/credentials</a> Create Credentials-&gt;API Key</li>
+<li><a href="https://console.cloud.google.com/apis/library" class="uri">https://console.cloud.google.com/apis/library</a> Google Sheets API-&gt;Enable</li>
+</ul>
+<p>You can also use Google Maps rather than Open Street Map if you enable your API Key for use with maps APIs. Although this is free for reasonable use; this may require billing to be enabled for the key.</p>
+<h2 id="javascript">Javascript</h2>
+<p>The page can load additional Javascript, useful statements are:</p>
+<ul>
+<li><code>Const.OPTION = VALUE;</code> Set a parameter value.</li>
+<li><code>Load.googleDoc( 'NAME' );</code> Load all the sheets from a Google doc.</li>
+<li><code>Param.load( JSON );</code> Load parameters.</li>
+<li><code>Location.load( JSON );</code> Load locations.</li>
+<li><code>Event.load( JSON );</code> Load events.</li>
+<li><code>Person.load( JSON );</code> Load delegates.</li>
+<li><code>PeopleAtEvents.load( JSON );</code> Load people at events.</li>
+</ul>
+<p>Load.googleDoc needs Const.googleKey to be an API key which can be used with Google maps.</p>
+<p>When loading a sheet directly from a JSON array. The first row must contain the field names starting with a capital letter.</p>
+<h2 id="query-string">Query String</h2>
+<p>Query string options may be added to the URL and are parsed as follows:</p>
+<ul>
+<li><code>sheet=NAME</code> Load all sheets from a Google doc.</li>
+<li><code>js=URL</code> Load the javascript file.</li>
+<li><code>PARAMETER=VALUE</code> Set the PARAMETER to VALUE.</li>
+</ul>
+</body>
+</html>

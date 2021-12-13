@@ -1,0 +1,166 @@
+html, body {
+    height: 98%;
+    padding: 0;
+    font-family: "Belleza", sans-serif;
+    background-color: #eee;
+    color: #222;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.template {
+    display: none;
+}
+
+
+
+/* map top left */
+#map {
+    width: 75%;
+    float: left;
+    margin-right: 6px;
+}
+
+#map, #info {
+    height: 72%;
+}
+
+.eventMarker {
+    text-align: center;
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+    border: 0;
+}
+
+
+
+/* tabs top right */
+#info {
+    width: 24%;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+
+#infotabs {
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 2px 0;
+}
+
+.tab {
+    background-color: #e0e0e0;
+    cursor: pointer;
+    text-align: center;
+    border: 1px solid;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+}
+
+.tabbox {
+    display: none;
+    background-color: #e0e0e0;
+    overflow-y: auto;
+    height: 90%;
+    max-height: 90%;
+    min-height: 90%;
+    margin-left: 2px;
+    margin-right: 2px;
+    border-left: 1px solid;
+    border-right: 1px solid;
+    border-bottom: 1px solid;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: 5px;
+    padding-left: 5px;
+}
+
+#configinfo {
+    display: inherit;
+}
+
+#configinfotab {
+    border-bottom: 0;
+}
+
+.tabheader {
+    font-weight: bold;
+}
+
+.tabheader, .tabitem, span, .item {
+    cursor: pointer;
+}
+.tabheader:hover, .tabitem:hover, .item:hover {
+  text-decoration: underline;
+}
+
+
+
+.grey {
+    cursor: text;
+    color: LightGrey;
+}
+
+#timeline {
+    display: none;
+}
+
+#yeartable {
+    margin-left: 25%;
+    width: 75%;
+    table-layout: fixed;
+}
+
+#fixedyearcell {
+    border-left: solid 1px;
+    border-right: solid 1px;
+    border-bottom: solid 1px;
+    text-align: left;
+}
+
+#timelinecell {
+    position: absolute;
+}
+
+
+
+/* table first column */
+#clearallcell, #controlcell, #firstcell {
+    text-align: left;
+    width: 6em;
+    border-left: 1px solid;
+    border-right: 1px solid;
+}
+
+#clearallcell {
+    border: 1px solid;
+    border-right: none;
+}
+
+/* table second column */
+#deselectcell {
+    text-align: right;
+    border: 1px solid;
+    border-left: none;
+}
+
+#personcell {
+    text-align: left;
+}
+
+/* table remaining columns */
+#acronymcell, #attendedcell {
+    text-align: center;
+}
+
+#acronymcell {
+    border: 1px solid;
+}
+
+/* table rows */
+#personrow:nth-child(even) {
+    background-color: #eee;
+}

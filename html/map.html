@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!--
+    Copyright 2017,2019 Tarim
+    Development funded by Bristol University Afro-Asian Studies Network
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Event Viewer provides a visualisation of delegates attending a
+    series of events or conferences.
+    -->
+
+    <title>Event Viewer</title>
+
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Belleza">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css" />
+    <link rel="stylesheet" href="map.css" />
+
+    <script src="utilities.js"></script>
+    <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"></script>
+    <script src="map.js"></script>
+</head>
+
+<body onload="Load.initialise()">
+    <div id="docheader"></div>
+
+    <div id="map"></div>
+
+    <div id="info">
+        <table id="infotabs"><tr>
+            <td id="eventinfotab" class="tab" onclick="Tab.show(this.value)">Event</td>
+            <td id="countrymenutab" class="tab" onclick="Tab.show(this.value)">From</td>
+            <td id="peoplemenutab" class="tab" onclick="Tab.show(this.value)">Attend</td>
+            <td id="personinfotab" class="tab" onclick="Tab.show(this.value)">Bio</td>
+            <td id="configinfotab" class="tab" onclick="Tab.show(this.value)">&equiv;</td>
+        </tr></table>
+
+        <div id="eventinfo" class="tabbox">
+            <div id="eventinfoheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></div>
+            <div id="eventinfobody" class="tabbody"></div>
+        </div>
+
+        <div id="countrymenu" class="tabbox">
+            <div id="countrymenuheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></div>
+            <div id="countrymenulist">
+                <div id="countrymenuitem" class="tabitem" onclick="Country.showMenuPeopleLineUI(this.value)"></div>
+            </div>
+        </div>
+
+        <div id="peoplemenu" class="tabbox">
+            <div id="peoplemenuheader" class="tabheader" onclick="Sandbox.addPeopleUI()"></div>
+            <div id="peoplemenulist">
+                <div id="peoplemenuitem" class="tabitem" onclick="Person.showInfoPersonUI(this.value)"></div>
+            </div>
+        </div>
+
+        <div id="personinfo" class="tabbox">
+            <div id="personinfoheader" class="tabheader" onclick="Sandbox.addPersonUI(this.value)"></div>
+            <div id="personinfobody" class="tabbody"></div>
+        </div>
+
+        <div id="configinfo" class="tabbox">
+            <div class="tabitem" title="Reset map position and zoom" onclick="Chart.reset()">Reset map</div>
+            <div id="configlabeled" title="Toggle country labels on map" class="tabitem" onclick="Chart.setLabels();">Labels: <span>off</span></div>
+            <div id="configtimeline" title="Toggle visibility of timeline above acronym bar" class="tabitem" onclick="TimeLine.show();">Time Line: <span>off</span></div>
+            <div id="configmessage" class="tabbody"></div>
+        </div>
+    </div>
+
+    <div id="timeline">
+        <table id="yeartable">
+            <tr id="fixedyearrow"><td id="fixedyearcell">Y</td></tr>
+        </table>
+
+        <table id="timelinetable">
+            <tr id="timelineheader"></tr>
+            <tr><td>&nbsp;</td></tr>
+        </table>
+    </div>
+
+    <table>
+        <thead id="headertable">
+        <tr id="acronymheader">
+            <td id="clearallcell"></td>
+            <td id="deselectcell">
+            <span title="Deselect all events" onclick="Event.clearMapAllEvents()">&empty;</span>
+            </td>
+        </tr>
+        </thead>
+
+        <tbody id="persontable">
+        </tbody>
+    </table>
+
+    <table class="template">
+    <tr id="personrow">
+        <td id="controlcell">
+        <span title="Move row to top" onclick="Sandbox.moveRowUI(this,'top')">&and;</span>
+        <span title="Move row up" onclick="Sandbox.moveRowUI(this,'up')">&uarr;</span>
+        <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&darr;</span>
+        <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&or;</span>
+        <span title="Clear row" onclick="Sandbox.clearRowUI(this)">&times;</span>
+        <span title="Clear rows to bottom" onclick="Sandbox.clearRowsToBottomUI(this)">&otimes;</span>
+        </td>
+
+        <td id="personcell" class="item" onclick="Person.showInfoPersonUI(this.value)"></td>
+    </tr>
+
+    <tr>
+        <td id="firstcell">
+        <span class="grey">&and;</span>
+        <span class="grey">&uarr;</span>
+        <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&darr;</span>
+        <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&or;</span>
+        <span title="Clear row" onclick="Sandbox.clearRowUI(this)">&times;</span>
+        <span title="Clear rows to bottom" onclick="Sandbox.clearRowsToBottomUI(this)">&otimes;</span>
+        </td>
+        <td id="timelinecell">&nbsp;</td>
+        <th id="acronymcell" class="item" onclick="Event.toggleMapEvent(this.innerHTML)"></th>
+        <td id="attendedcell"></td>
+    </tr>
+    </table>
+
+    <div id="docfooter"></div>
+</body>
+</html>

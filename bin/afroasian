@@ -1,0 +1,498 @@
+#!/bin/bash
+
+# Afro Asian Network utilities
+#
+# Copyright Tarim 2013,2014,2015,2016,2017
+#
+# AAN Utilities is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# AAN Utilities is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with AAN Utilities.  If not, see <http://www.gnu.org/licenses/>.
+
+Prefix="cmd_"
+shopt -s nullglob
+Me=$(basename $0)
+
+MyDir="${HOME}/projects/${Me}/git/"
+DataDir="${MyDir}/data"
+HTMLDir="${MyDir}/html"
+DocDir="${MyDir}/docs"
+
+
+
+# cmd_mkevents [events.tsv events.json]
+# Convert tsv file to javascript
+#
+cmd_mkevents() {
+parse '
+    function setup() {
+        name[1] = "title";
+        name[2] = "UID";
+        name[3] = "researcher";
+        name[4] = "name";
+        city = 5;
+        name[city] = "city";
+        ## location = 6;
+        ## latlng[location] = "place"
+        ## name[location] = "location";
+        country = 7;
+        name[country] = "country";
+        name[8] = "start";
+        name[9] = "end";
+        name[10] = "bio";
+        name[11] = "image";
+        name[12] = "caption";
+        name[13] = "notes";
+        # name["place"] = "place";
+    }
+
+    function prerecord() {
+        ## value["place"] = $(city) ($(city)>"" && $(country)>"" ? ", " : "") $(country);
+    }
+'
+} < "${1:-${DataDir}/events.tsv}" > "${2:-${DataDir}/events.json}"
+
+
+
+# cmd_mkpeople [people.tsv people.json]
+# Convert people.tsv to json
+#
+cmd_mkpeople() {
+parse '
+    function setup() {
+        name[1] = "UID";
+
+        lastName = 2;
+        name[lastName] = "lastName";
+        firstName = 3;
+        name[firstName] = "firstName";
+        alias = 4;
+        name[alias] = "alias";
+
+        name[5] = "gender";
+
+        birthplace = 6;
+        name[birthplace] = "birthplace";
+        birthLocation = 7;
+        name[birthLocation] = "birthLocation";
+        latlng[birthLocation] = "none"
+
+        country = 8;
+        name[country] = "country";
+        name["countryLocation"] = "countryLocation";
+        latlng["countryLocation"] = country;
+
+        name[9] = "role";
+        name[10] = "notes";
+        name[11] = "biography";
+        name[12] = "image";
+    }
+
+    function prerecord() {
+    }
+' < "${1:-${DataDir}/people.tsv}" > "${2:-${DataDir}/people.json}"
+}
+
+
+
+# cmd_mkpeopleatevents [peopleatevents.tsv peopleatevents.json]
+# Convert tsv file to json
+#
+cmd_mkpeopleatevents() {
+parse '
+    function setup() {
+        # name[1] = "person";
+        name[2] = "personUID";
+        # name[3] = "event";
+        name[4] = "eventUID";
+        name[5] = "notes";
+        # name[6] = "source";
+    }
+
+    function prerecord() {
+    }
+'  < "${1:-${DataDir}/peopleatevents.tsv}" > "${2:-${DataDir}/peopleatevents.json}"
+}
+
+
+
+# parse FUNCTIONS
+# awk script to parse tsv files
+#
+parse() {
+awk -F'	' "$1"'
+    NR == 1 {
+        fieldCount = NF;
+        setup();
+        printf( "[\n" );
+        next;
+    }
+
+    {
+        gsub( /\r/, "" );
+        for( j = 1; j <= fieldCount; ++j ) {
+            value[j] = $j;
+        }
+        prerecord();
+        printf( "{\n" );
+
+        for( j in name ) {
+            field = value[j];
+
+            if( latlng[j] > "" ) {
+                if( field == "" ) {
+                    gsub( /[()|]/, "", value[latlng[j]] );
+
+                    if( cache[value[latlng[j]]] > "" ) {
+                        field = cache[value[latlng[j]]];
+
+                    } else {
+                        ("'${0}' getlocation " value[latlng[j]]) | getline field;
+                        cache[value[latlng[j]]] = field;
+                    }
+                }
+
+                if( sub( /,/, ", lng:", field ) ) {
+                    field = "{ lat: " field " }";
+                } else {
+                    field = "";
+                }
+
+            } else {
+                sub( / *$/, "", field );
+                gsub( /\"/, "\\\"", field );
+                if( field > "" ) {
+                    field = "\"" field "\"";
+                }
+            }
+
+            if( field > "" ) {
+                printf( "    %s: %s,\n", name[j], field );
+            }
+        }
+        printf( "},\n" );
+    }
+
+    END {
+        printf( "];\n" );
+    }
+'
+}
+
+
+
+# setvar name
+# Print js to set var
+#
+setvar() {
+    echo -n "var ${1} = "
+    cat "${DataDir}/${1}.json"
+}
+
+
+# cmd_joinevents [../html/events.js]
+# Create events js
+#
+cmd_joinevents() {
+{
+    setvar "events"
+    ##setvar "people"
+    ##setvar "peopleatevents"
+
+    cat "${HTMLDir}/utilities.js"
+    echo "var Const = {};"
+    cat "${HTMLDir}/local.js"
+
+    echo '
+    events.forEach( function( event ) {
+        event.startTime = new Date( event.start ).getTime();
+        if( isNaN( event.startTime ) ) event.startTime = 0;
+        event.endTime = new Date( event.end ).getTime();
+        if( isNaN( event.endTime ) ) event.endTime = 0;
+        ///event.attendance = {};
+    } );
+
+    events.sort( function( a, b ) {
+        return a.startTime - b.startTime;
+    } );
+
+    events.forEach( function( event ) {
+        delete event.startTime;
+        delete event.endTime;
+    } );
+
+    /*
+    var minTime = new Date( "1/1/" + Const.startYear ).getTime();
+    var maxTime = new Date( "1/1/" + Const.finishYear ).getTime();
+    console.log( "Const.startTime = " + minTime + ";" );
+    console.log( "Const.finishTime = " + maxTime + ";" );
+
+    function setColor( time ) {
+        var scale = clampRange( Math.floor( mapRange( time, minTime, maxTime, 0, 5*256 ) ), 0, 5*256 );
+        var shade = scale % 256;
+        var section = Math.floor( scale / 256 ) % 6;
+        var range = [
+            [255,  1,  0],
+            [ -1,255,  0],
+            [  0,255,  1],
+            [  0, -1,255],
+            [  1,  0,255],
+            [255,  0, -1],
+        ][section];
+
+        for( var j = 0; j < 3; ++j ) {
+            if( range[j] == -1 ) range[j] = 255 - shade;
+            else if( range[j] == 1 ) range[j] = shade;
+        }
+
+        return "#" + ("000000" + ((range[0]*256+range[1])*256+range[2]).toString(16)).substr(-6);
+    }
+
+    events.forEach( function( event ) {
+        event.color = setColor( event.startTime );
+    } );
+
+    peopleatevents.forEach( function( join ) {
+        var event = events.find( function( event ) {
+            return event.UID == join.eventUID;
+        } );
+
+        var person = people.find( function( person ) {
+            return person.UID == join.personUID;
+        } );
+
+        if( event && person && person.country ) {
+            if( !event.attendance[person.country] ) {
+                event.attendance[person.country] = {
+                    name: person.country,
+                    eventID: event.UID,
+                    attendees: [],
+                    location: person.countryLocation,
+                }
+            }
+            event.attendance[person.country].attendees.push( person.UID );
+        }
+    } );
+    */
+
+    for( var index = 0; index < events.length; ++index ) {
+        console.log( "new Event(" );
+        console.log( JSON.stringify( events[index], null, 4 ) );
+        console.log( ");" );
+    }
+    '
+} | nodejs > "${1:-${DataDir}/../html/events.js}"
+}
+
+
+
+# cmd_joinpeople [../html/people.js]
+# Create people js
+#
+cmd_joinpeople() {
+{
+    setvar "people"
+    ##setvar "peopleatevents"
+
+    cat "${HTMLDir}/utilities.js"
+    echo "var Const = {};"
+    cat "${HTMLDir}/local.js"
+
+    echo '
+    people.sort( function( a, b ) {
+        if(a.lastName < b.lastName) return -1;
+        if(a.lastName > b.lastName) return 1;
+        return 0;
+    } );
+
+    /*
+    people.forEach( function( person ) {
+        person.events = [];
+        person.name = joinText([ person.firstName, " ", person.lastName ]);
+    } );
+
+    peopleatevents.forEach( function( join ) {
+        var person = people.find( function( person ) {
+            return person.UID == join.personUID;
+        } );
+
+        if( person && join.eventUID ) {
+            person.events.push( join.eventUID );
+        }
+    } );
+    */
+
+    for( var index = 0; index < people.length; ++index ) {
+        console.log( "new Person(" );
+        console.log( JSON.stringify( people[index], null, 4 ) );
+        console.log( ");" );
+    }
+    '
+} | nodejs > "${1:-${DataDir}/../html/people.js}"
+}
+
+
+
+# cmd_mkall
+# Make all the files
+#
+cmd_mkall() {
+    ##echo "mkevents"; cmd_mkevents
+    ##echo "mkpeople"; cmd_mkpeople
+    ##echo "mkpeopleatevents"; cmd_mkpeopleatevents
+    ##echo "joinevents"; cmd_joinevents
+    ##echo "joinpeople"; cmd_joinpeople
+    echo "Nothing to make"
+}
+
+
+
+# cmd_getlocation [--tabbed] PLACE_NAME
+# caches and returns lat/lng of PLACE_NAME
+#
+cmd_getlocation() {
+    local Tabbed
+    local Prefix
+    local Separator
+
+    [ "X--tabbed" = "X${1}" ] && {
+        shift
+        Tabbed=1
+    }
+
+    local Location="${*//[\/.]/ }"
+    [ -n "${Location}" ] || {
+        err "getlocation: No place"
+    }
+
+    local Cache="${DataDir}/countries/${Location}.json"
+
+    [ -r "${Cache}" ] || {
+        local Key="$(sed -n "s/.*Const\.googleKey *= *'\(.*\)';.*/\1/p" < "${HTMLDir}/local.js")"
+        wget -O "${Cache}" "https://maps.googleapis.com/maps/api/geocode/json?key=${Key}&address=${Location// /+}" ||
+        rm "${Cache}"
+    }
+
+    [ -r "${Cache}" ] && {
+        Separator=", "
+        [ -n "${Tabbed}" ] && {
+            Separator="\\t"
+            Prefix="${Location}\\t"
+        }
+
+        nodejs -e '
+            place='"$(cat "${Cache}")"'
+            if( place.status == "OK" ) {
+                var location = place.results[0].geometry.location;
+                console.log( "'"${Prefix}"'" + location.lat + "'"${Separator}"'" + location.lng );
+            }
+        '
+    }
+}
+
+
+
+# cmd_mklocations DIR
+# Generates location table from country drectory
+#
+cmd_mklocations() {
+    local File
+    local Location
+    echo -e "Place\tLat\tLng"
+    ls "${1:-${DataDir}/countries/}" | while read File; do
+        Location="${File##*/}"
+        Location="${Location%.json}"
+        cmd_getlocation --tabbed "${Location}"
+    done
+}
+
+
+
+# cmd_mkdoc
+# Convert the .md file in docs/ to a .html file in html/
+#
+cmd_mkdoc() {
+    pandoc "${DocDir}/instructions.md" -s -c instructions.css -T 'Instructions - Event Viewer' -o "${HTMLDir}/instructions.html"
+}
+
+
+
+
+# test
+# test code
+#
+cmd_test() {
+    echo testing...
+}
+
+
+# err
+# echo an error and exit
+err() {
+    echo "$*" 1>&2
+    exit 1
+}
+
+# executable PROGRAM
+# check if it's runable
+executable() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# cmd_help [COMMAND | all]
+# Help
+#
+cmd_help() {
+    local Pattern
+    case "$1" in
+    "")
+        Pattern="/^# ${Prefix}/"
+        ;;
+    "all")
+        Pattern="/^# ${Prefix}/,/^${Prefix}/"
+        ;;
+    *)
+        Pattern="/^# ${Prefix}$1/,/^${Prefix}/"
+        ;;
+    esac
+
+    awk -v me="$(basename $0) " -v spacer="  " "
+        ${Pattern} {
+            if( sub( /^# ?/, spacer ) ) {
+                found=1
+                sub( /^ *${Prefix}/, me )
+                print
+            }
+        }
+        END {
+            if( !found ) exit(2)
+        }
+    " < "$0" || {
+        err "No help topic"
+    }
+}
+
+
+
+
+# main
+
+[ "X$1" = "X--test" ] && {
+    Test=echo
+    shift
+}
+
+[ "$#" -eq 0 ] && err "See $(basename $0) help for details"
+
+Cmd="$1"
+shift
+
+"cmd_${Cmd}" "$@"

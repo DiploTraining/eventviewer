@@ -1,0 +1,7 @@
+Copyright 2017,2019 Tarim
+Development funded by Bristol University Afro-Asian Studies Network
+Licensed under the Apache License, Version 2.0
+
+Event Viewer provides a visualisation of delegates attending a series of events or conferences.
+
+Version 1.0.0 June 2019 - First full release of Event Viewer
