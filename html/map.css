@@ -25,12 +25,11 @@ table {
 }
 
 #map, #info {
-    height: 72%;
+    height: 66%;
 }
 
 .eventMarker {
     text-align: center;
-    background-color: transparent;
     padding: 0;
     margin: 0;
     border: 0;
@@ -78,6 +77,17 @@ table {
     padding-left: 5px;
 }
 
+.nexteventtable {
+    width: 100%;
+}
+
+.nextevent {
+    cursor: pointer;
+    font-weight: bold;
+    width: 1em;
+    transform: scaleY(2);
+}
+
 #configinfo {
     display: inherit;
 }
@@ -90,77 +100,164 @@ table {
     font-weight: bold;
 }
 
-.tabheader, .tabitem, span, .item {
+.tabheader, .tabitem, span, .item, .biotabevent {
     cursor: pointer;
 }
-.tabheader:hover, .tabitem:hover, .item:hover {
+.tabheader:hover, .tabitem:hover, .item:hover, .biotabevent:hover {
   text-decoration: underline;
 }
+.biotabevent {
+    font-weight: bold;
+    padding-left: 10px;
+}
 
+.selectBase {
+    position: relative;
+    left: 0;
+}
 
+.selectContainer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    z-index: 10000;
+}
+
+#locationContainer {
+    bottom: -2em;
+}
+
+#originContainer {
+    bottom: -3em;
+}
 
 .grey {
     cursor: text;
     color: LightGrey;
 }
 
-#timeline {
-    display: none;
+.rows, .rows tr, .rows td, .rows svg {
+    margin: 0;
+    padding: 0;
 }
 
-#yeartable {
-    margin-left: 25%;
-    width: 75%;
-    table-layout: fixed;
+.rows {
+    max-width: 98%;
 }
 
-#fixedyearcell {
-    border-left: solid 1px;
-    border-right: solid 1px;
-    border-bottom: solid 1px;
-    text-align: left;
+.rowControl, .rowData {
+    border: solid 1px black;
+    margin: 0;
+    padding: 0;
 }
 
-#timelinecell {
-    position: absolute;
+.rowControl {
+    width: 25vw;
+    max-width: 25vw;
+    min-width: 25vw;
+}
+
+.rowData {
+    max-width: 72%;
+}
+
+#timeSVG {
+    margin: 0;
+    padding: 0;
+}
+
+#timeSVG text {
+    fill: black;
+}
+
+#timeShade {
+    fill: blue;
+    fill-opacity: 0.2;
+}
+
+#timeBorder {
+    stroke: black;
+    stroke-width: 1;
+}
+
+.acronymRow {
+    overflow-x: scroll;
+    max-width: 73vw;
+    padding-bottom: 10px;
+}
+
+.filterOptions {
+    text-align: center;
+    user-select: none;
+}
+
+.tiny {
+    font-size: x-small;
+}
+
+.pattern {
+    color: grey;
+    width: 90%;
+    max-width: 90%;
+}
+
+.selectPattern {
+    color: grey;
+}
+
+.label {
+    color: grey;
 }
 
 
 
-/* table first column */
-#clearallcell, #controlcell, #firstcell {
-    text-align: left;
-    width: 6em;
-    border-left: 1px solid;
-    border-right: 1px solid;
+
+.scrollable {
+    width: 98vw;
+    padding-bottom: 10px;
+    overflow-x: scroll;
 }
 
-#clearallcell {
+
+.acronymCell, .sandboxTitle, .sandboxCell {
+    vertical-align: top;
     border: 1px solid;
-    border-right: none;
+    padding-left: 4px;
+    padding-right: 4px;
 }
 
-/* table second column */
-#deselectcell {
-    text-align: right;
-    border: 1px solid;
-    border-left: none;
-}
-
-#personcell {
-    text-align: left;
-}
-
-/* table remaining columns */
-#acronymcell, #attendedcell {
+.acronymCell, .sandboxCell {
     text-align: center;
 }
 
-#acronymcell {
-    border: 1px solid;
+.acronymCell {
+    cursor: pointer;
 }
 
-/* table rows */
-#personrow:nth-child(even) {
+.sandboxControl {
+    width: 6em;
+}
+
+.sandboxName {
+    text-align: left;
+}
+
+.sandboxRow {
+    background-color: #eee;
+}
+
+.sandboxRow:nth-child(even) {
+    background-color: #ccc;
+}
+
+.rowControl, .sandboxTitle {
+    position: sticky;
+    left: 1px;
+    z-offset: 2000;
+    background-color: inherit;
+    border: 2px solid black;
+}
+
+.acronymControlBackground {
     background-color: #eee;
 }

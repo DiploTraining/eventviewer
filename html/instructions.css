@@ -2,5 +2,14 @@ html, body {
     background-color: #eee;
     color: #222;
     line-height: 1.4;
+    max-width: 48em;
     font-family: "Belleza", sans-serif;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+td {
+    border: solid black 1px;
 }

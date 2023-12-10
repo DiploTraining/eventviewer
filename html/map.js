@@ -1,7 +1,7 @@
 //
 // Event Viewer
 //
-// Copyright 2017,2019,2021 Tarim
+// Copyright 2017,2019,2021,2023 Tarim
 // Development funded by Bristol University Afro-Asian Studies Network
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,12 +25,20 @@
 
 var Const = {
     secondsInYear: 31557600,
+    msInYear: Math.round(86400000 * 365.2475),
+    msInMonth: Math.round(86400000 * 365.2475 / 12),
+    msInDay: 86400000,
+    msInHour: Math.round(86400000 / 24),
+    msInMinute: Math.round(86400000 / 24 / 60),
     tableWidth: 75,
 
     title: 'Event Viewer',
     header: '',
     footer: `<p>Event Viewer usage: ${document.location.host}?googleKey=API_KEY&sheet=SHEET_NAME</p><a href="instructions.html">Instructions</a>`,
-    markerIconSize: 8,
+    markerIconSize: 4,
+    originMarkerIconSize: 1,
+    originMarkerColor: '#aaaaaa',
+    originMarkerOpacity: 0.8,
     initLat: 51.4513915,
     initLng: -2.5982592,
     initZoom: 2,
@@ -42,8 +50,9 @@ var Const = {
     lineMinWidth: 2,
     lineMaxWidth: 17,
 
-    timeline: true,
-    labeled: true,
+    timeline: 1,
+    acronyms: 0,
+    labeled: 1,
     waterColor: '#eeeeee',
     landColor: '#cccccc',
     tileLayer: 'https://{s}.tile.osm.org/{z}/{x}/{y}.png',
@@ -68,17 +77,37 @@ var Const = {
 //   Load.message       add message to alert text
 //   Load.setProgress   display text in progress element
 //
+// boot order:
+// Load.parseQueryStr
+// Load.javascript
+// Load.googleDoc
+// Load.sheet
+//   Param.load
+//   Location.load
+//   Organiser.load
+//   Event.load
+//   Person.load
+//   PeopleAtEvents.load
+//     event.addDelegate
+// Load.googleMap
+// Load.setup
+//   Tab.initialise
+//   Event.initialise
+//     location.setup
+//     countryLine.setup
+//   Person.initialise
+//
 var Load = {};
 
 Load.initialise = function() {
     var queryStr = location.search.split('?')[1];
     var queryArray = queryStr ? queryStr.split('&') : [];
-    Load.progress = document.getElementById( 'configmessage' );
+    Load.progress = document.getElementById('configmessage');
 
-    Load.chain( Load.setup );
-    Load.chain( Load.googleMap );
-    Load.chain( Load.parseQueryStr, queryArray );
-    Load.chain( Load.javascript, ['local.js?unique=' + Date.now()] );
+    Load.chain(Load.setup);
+    Load.chain(Load.googleMap);
+    Load.chain(Load.parseQueryStr, queryArray);
+    Load.chain(Load.javascript, ['local.js?unique=' + Date.now()]);
     Load.next();
 };
 
@@ -135,7 +164,7 @@ Load.javascript = function( scriptName ) {
 
 Load.googleDoc = function( docName ) {
     Const.googleDoc = docName;
-    Load.chain( Load.sheet, [Param, Location, Event, Person, PeopleAtEvents] );
+    Load.chain(Load.sheet, [Param, Location, Organiser, Event, Person, PeopleAtEvents]);
 };
 
 Load.fullSheetName = function( prefix, sheetClass ) {
@@ -151,7 +180,9 @@ Load.sheet = function( sheetClass ) {
         '&callback=' + sheetClass.name + '.load',
         Load.next,
         function() {
-            Load.message( Load.fullSheetName( 'Failed to load sheet', sheetClass ) );
+            if (!sheetClass.optional) {
+                Load.message(Load.fullSheetName('Failed to load sheet', sheetClass));
+            }
             Load.next();
         }
     );
@@ -180,17 +211,11 @@ Load.setup = function() {
     Tab.initialise();
     new Chart( 'map' );
 
-    HeaderRow.create( TimelineHeader, 'timelineheader', 'timelinecell' );
-    HeaderRow.create( AcronymHeader, 'acronymheader', 'acronymcell' );
-    Sandbox.group = new Sandbox( 'persontable',
-        HeaderRow.create( PersonTemplate, 'personrow', 'attendedcell' )
-    );
+    Sandbox.group = new Sandbox('sandboxTable', 'sandboxRow');
 
     Event.initialise();
-    HeaderRow.initialise();
     Person.initialise();
-
-    new TimeLine( 'yeartable' );
+    TimeLine.initialise();
 
     if( !isBlank( Load.messageText ) ) {
         alert( Load.messageText );
@@ -257,8 +282,14 @@ Param.prototype.extraFields = [];
 //   call new sheetclass for each subsequent row to copy the values
 //
 Param.load = function( json ) {
-    var sheet = json.values ? json.values : json;
-    if( !isArray( sheet ) ) return;
+    var sheet;
+    if (isArray (json.values)) {
+        sheet = json.values;
+    } else if (isArray (json)) {
+        sheet = json;
+    } else {
+        return;
+    }
 
     var header = isArray( sheet ) ? sheet[0] : [];
     var requiredCount = 0;
@@ -316,142 +347,39 @@ Param.prototype.copyFields = function( row ) {
 //   Place              place name
 //   Lat                latitude
 //   Lng                longitute
-//   Location.latLngs   lat/lngs by place name
-//     place.Lat
-//     place.Lng
+//
+//   latLng             lat/lngs in one object
+//   marker             map marker for this location
+//   color              color on map
+//
+//   countryLines[place]        country lines from this location
+//   countryMarker      marker if this is an origin country
 //
 function Location( row ) {
     this.copyFields( row );
     if( !isBlank( this.Place ) ) {
-        Location.latLngs[this.Place] = {
-            lat: this.Lat,
-            lng: this.Lng,
-        };
+        this.latLng = { lat: this.Lat, lng: this.Lng };
+        Location.locations[this.Place] = this;
     }
+
+    this.countryLines = {};
 };
 
-Location.latLngs = {};
+Location.locations = {};
 Location.sheetName = 'Locations';
 Location.requiredFields = ['Place', 'Lat', 'Lng'];
-Location.optionalFields = [];
+Location.optionalFields = ['Title', 'Color'];
 Location.prototype.extraFields = [];
-
 Location.load = Param.load;
 Location.prototype.copyFields = Param.prototype.copyFields;
 
-
-
-
-
-//
-// Event sheet class
-//   event.events       array of events in start date order
-//   Acronym            unique id of event
-//   Start              start date
-//   startTime          time in seconds of Start date
-//   Color              color from data (optional)
-//   color              color to show on map
-//   Location           location of event
-//   latLng             lat/lng of event
-//   marker             leaflet marker on map
-//   Title              title of event
-//
-//   index              index into events array
-//   shownOnMap         event displayed on map
-//   countries          collection of Country objects
-//     Country.name             name of country
-//     Country.eventID          acronym of country
-//     Country.delegates        array of people UIDs
-//     Country.line             leaflet polyLine
-//
-//  Event.initialise            initialise event data
-//  setup                       setup individual event data
-//  fullTitle                   return title of event
-//  setColor                    setup map color based on startTime
-//  setMarker                   setup marker on map
-//  setAttendanceLines          setup country lines on map
-//
-//  Event.clearMapAllEvents     hide all events on map
-//  Event.toggleMapEvent        toggle event visibility on map
-//  showMapEvent                display event on map
-//
-//  showInfoEvent               display info in event tab
-//  setHeader                   set header in event tab
-//  Event.showMenuCountriesUI   UI handler for showMenuCountries
-//  showMenuCountries           display info in country tab
-//  showFields                  display extra fields in event tab
-//  Event.findById              find an event in Event.events
-//
-//  Event.eventHeader           event tab element
-//  Event.eventBody             event tab element
-//  Event.countryMenuList       country tab element
-//  Event.countryMenuHeader     country tab element
-//  Event.countryMenuItem       country tab element
-//
-function Event( row ) {
-    this.copyFields( row );
-    if( !isBlank( this.Acronym ) ) {
-        this.index = Event.events.length;
-        this.countries = {};
-        Event.events.push( this );
-    }
-};
-
-Event.events = [];
-Event.sheetName = 'Events';
-Event.requiredFields = ['Acronym', 'Title'];
-Event.optionalFields = ['Color'];
-Event.prototype.extraFields = [];
-
-Event.load = Param.load;
-Event.prototype.copyFields = Param.prototype.copyFields;
-
-
-// initilise, setup, fullTitle, setColor, setMarker, setAttendanceLines
-//   set up events
-//
-Event.initialise = function() {
-    Event.eventHeader = document.getElementById( 'eventinfoheader' );
-    Event.eventBody = document.getElementById( 'eventinfobody' );
-    Event.countryMenuList = document.getElementById( 'countrymenulist' );
-    Event.countryMenuHeader = document.getElementById( 'countrymenuheader' );
-    Event.countryMenuItem = document.getElementById( 'countrymenuitem' ).cloneNode( true );
-
-    Event.events.forEach( function( event ) {
-        event.setup();
-    } );
-
-    Event.events.sort( function( a, b ) {
-        return a.startTime - b.startTime;
-    } );
-};
-
-Event.prototype.setup = function() {
-    this.latLng = Location.latLngs[this.Location];
-    if( !this.latLng ) {
-        Load.message( 'Unknown location ' + this.Location + ' for ' + this.Acronym );
-    }
-
-    this.startTime = new Date( this.Start ).getTime();
-    if( isNaN( this.startTime ) ) this.startTime = 0;
-    this.color = this.Color || this.setColor( this.startTime );
-
-    this.setMarker();
-    this.setAttendanceLines();
-    this.shownOnMap = false;
-};
-
-Event.prototype.fullTitle = function() {
-    return joinText([ this.Acronym, ' ', this.Title, ' - ', this.Location, ' ', this.Start, '-', this.End ]);
-};
-
-// set a rainbow color depending on startTime
-Event.prototype.color = '#FFFFFF';
-Event.prototype.setColor = function( time ) {
-    var scale = clampRange( Math.floor( mapRange( time, Const.startTime, Const.finishTime, 0, 6*256-1 ) ), 0, 6*256-1 );
-    var shade = scale % 256;
-    var section = Math.floor( scale / 256 ) % 6;
-    var range = [
+// set a rainbow color depending on index
+Location.prototype.color = '#FFFFFF';
+Location.prototype.getColor = function(ratio) {
+    const scale = Math.floor(ratio * 6 * 256);
+    const section = Math.floor(scale / 256) % 6;
+    const shade = scale % 256;
+    const range = [
         [255,  0, -1],
         [255,  1,  0],
         [ -1,255,  0],
@@ -460,147 +388,55 @@ Event.prototype.setColor = function( time ) {
         [  1,  0,255],
     ][section];
 
-    for( var j = 0; j < 3; ++j ) {
-        if( range[j] == -1 ) range[j] = 255 - shade;
-        else if( range[j] == 1 ) range[j] = shade;
+    for (var j = 0; j < 3; ++j) {
+        if (range[j] == -1) range[j] = 255 - shade;
+        else if (range[j] == 1) range[j] = shade;
     }
 
-    return '#' + ('000000' + ((range[0]*256+range[1])*256+range[2]).toString(16)).substr(-6);
+    const color = '#' + ('000000' + ((range[0] * 256 + range[1]) * 256 + range[2]).toString(16)).substr(-6);
+    return color;
 }
 
-// set a marker up for the map
-Event.prototype.setMarker = function() {
-    if( this.latLng ) {
-        this.marker = L.marker( this.latLng, {
-            title: this.fullTitle(),
-            icon: L.icon( {
-                iconUrl: 'event.png',
-                iconAnchor: [Const.markerIconSize, Const.markerIconSize],
-            } ),
-        } ).bindTooltip( this.Title, {
-            permanent: true,
-            direction: 'center',
-            className: 'eventMarker',
-            offset: [0,-2*Const.markerIconSize],
-        } ).on( 'click', this.showInfoEvent, this );
-    }
-};
 
-// set attendance lines on map
-Event.prototype.setAttendanceLines = function() {
-    if( this.latLng ) {
-        for( var countryName in this.countries ) {
-            var country = this.countries[countryName];
-            var latLng = Location.latLngs[countryName];
-            if( latLng ) {
-                country.line = L.polyline( [ this.latLng, latLng ], {
-                    // geodesic: false,
-                    color: this.color,
-                    opacity: Const.lineOpacity,
-                    weight: clampRange( country.delegates.length, Const.lineMinWidth, Const.lineMaxWidth ),
-                    title: countryName,
-                } ).bindTooltip( countryName, {
-                    direction: 'center',
-                    className: 'attendanceLine',
-                } ).on( 'click', country.showMenuPeopleLine, country
-                  ).on( 'mouseover', country.highlightLine, country
-                  ).on( 'mouseout', country.highlightLine, country );
+Location.prototype.setup = function(place) {
+    this.color = this.Color || this.getColor((this.hasEvent-1) / (Event.locationsCount-1));
 
-            } else {
-                Load.message( 'Unknown location ' + countryName + ' for UID ' + country.delegates );
-            }
-        }
-    }
-};
-
-// Event.clearMapAllEvents, Event.toggleMapEvent, showMapEvent
-//   handle event visibility on map
-//
-Event.clearMapAllEvents = function() {
-    Event.events.forEach( function( event ) {
-        event.showMapEvent( false );
-    } );
-};
-
-Event.toggleMapEvent = function( eventId ) {
-    var event = Event.findById( eventId )
-    event.showMapEvent( !event.shownOnMap );
-};
-
-Event.prototype.showMapEvent = function( state ) {
-    this.shownOnMap = state;
-
-    if( isDefined( this.cellIndex ) ) {
-        HeaderRow.highlightEvent( this, state );
-    }
-
-    if( this.marker ) {
-        var action = state ? 'addTo' : 'remove';
-        this.marker[action]( Chart.map );
-        for( var countryName in this.countries ) {
-            this.countries[countryName].showLine( action );
+    if (this.latLng) {
+        for (var place in this.countryLines) {
+            this.countryLines[place] = new CountryLine(place, this);
         }
     }
 
-    if( state ) {
-        this.showInfoEvent();
+    this.createMarker();
+};
+
+// create marker for the map
+Location.prototype.createMarker = function() {
+    if (this.latLng) {
+        this.marker = L.circleMarker(this.latLng, {
+                radius: Const.markerIconSize,
+                color: this.color,
+                zIndexOffset: 1100,
+            }).
+            bindTooltip(joinText([this.Place, ', ', this.Title]), {
+                direction: 'top',
+                className: 'eventMarker',
+            }).
+            on('click', Location.selectLocation, this).
+            addTo(Chart.map);
     }
 };
 
-// showInfoEvent, setHeader, Event.showMenuCountriesUI, showMenuCountries, showFields
-//   display information in event and country tabs
-//
-Event.prototype.showInfoEvent = function() {
-    this.setHeader( Event.eventHeader );
-    Event.eventBody.innerHTML = this.showFields( this.extraFields );
-    this.showMenuCountries();
-    Tab.show( 'eventinfo' );
+Location.selectLocation = function() {
+    DropDown.method('modify', 'location', this.Place, window.event);
 };
 
-Event.prototype.setHeader = function( header ) {
-    header.innerHTML = joinText([ this.Acronym, ' ', this.Title ]);
-    header.value = this.Acronym;
-};
-
-Event.showMenuCountriesUI = function( eventId ) {
-    var event = Event.findById( eventId );
-    event.showMenuCountries();
-};
-
-Event.prototype.showMenuCountries = function( ev ) {
-    var countries = [];
-    var delegates = [];
-    for( var countryName in this.countries ) {
-        var country = this.countries[countryName];
-        delegates = delegates.concat( country.delegates );
-        countries.push( country );
-    }
-
-    countries.sort( function( a, b ) {
-        if( a.name > b.name ) return 1;
-        if( a.name < b.name ) return -1;
-        return 0;
-    } );
-
-    this.setHeader( Event.countryMenuHeader );
-
-    var child;
-    while( (child = Event.countryMenuList.lastChild) ) {
-        removeElement( child );
-    }
-
-    countries.forEach( function( country ) {
-        var item = Event.countryMenuItem.cloneNode( true );
-        item.innerHTML = country.name;
-        item.value = country;
-        Event.countryMenuList.appendChild( item );
-    } );
-
-    Person.showMenuPeople( this, '', delegates );
+Location.selectOrigin = function() {
+    DropDown.method('modify', 'origin', this.Place, window.event);
 };
 
 // display extra fields
-Event.prototype.showFields = function( fields ) {
+Location.prototype.showFields = function( fields ) {
     var text = '';
 
     fields.forEach( function( fieldName ) {
@@ -638,12 +474,642 @@ Event.prototype.showFields = function( fields ) {
     return text;
 };
 
+
+Location.renderMap = function() {
+    Location.clearCounts();
+
+    Event.events.forEach((event) => {
+        if (event.filtered && event.shownOnMap) {
+            for (var countryPlace in event.countries) {
+                event.location.countryLines[countryPlace].delegateCount += event.countries[countryPlace].delegates.length;
+            }
+        }
+    });
+
+    for (var place in Event.locations) {
+        const location = Event.locations[place];
+        for (var countryPlace in location.countryLines) {
+            location.countryLines[countryPlace].showLine();
+        }
+    }
+};
+
+
+Location.clearCounts = function() {
+    for (var place in Event.locations) {
+        const location = Event.locations[place];
+        for (var countryPlace in location.countryLines) {
+            const countryLine = location.countryLines[countryPlace];
+            countryLine.delegateCount = 0;
+        }
+    }
+};
+
+
+
+
+//
+// CountryLine class
+// handles country lines on map
+//   place              name of country
+//   location           country location
+//   delegateCount      number of delegates
+//   line               attendance line
+//
+//   highlightLine      bright/dim attendance line
+//   showLine           show/hide attendance line on map
+//
+// origins[]            countries which have delegates
+//
+function CountryLine(place, eventLocation) {
+    this.place = place;
+    this.location = eventLocation;
+    this.delegateCount = 0;
+
+    // create attendance lines for map
+    const countryLocation = Location.locations[place];
+    if (countryLocation && countryLocation.latLng) {
+        this.line =
+            L.polyline([eventLocation.latLng, countryLocation.latLng], {
+                // geodesic: false,
+                color: eventLocation.color,
+                opacity: Const.lineOpacity,
+                weight: 0,
+            }).
+            // on('click', CountryLine.clickLine, this).
+            on('mouseover', CountryLine.highlightLine, this).
+            on('mouseout', CountryLine.highlightLine, this).
+            addTo(Chart.map);
+        CountryLine.origins[place] = countryLocation;
+
+    } else {
+        alert(`People Origin: ${place} not in Locations`);
+    }
+};
+
+CountryLine.origins = {};
+
+CountryLine.prototype.showLine = function() {
+    if (this.line) {
+        const weight = this.delegateCount ? clampRange(this.delegateCount, Const.lineMinWidth, Const.lineMaxWidth) : 0;
+        this.line.setStyle({
+            weight,
+        }).
+        bindTooltip(`${this.place}&rarr;${this.location.Place}: ${this.delegateCount}`, {
+            direction: 'auto',
+            sticky: true,
+            className: 'attendanceLine',
+        })
+    }
+};
+
+
+CountryLine.highlightLine = function(ev) {
+    this.line.setStyle({
+        opacity: ev.type === 'mouseover' ? 1 : Const.lineOpacity
+    });
+};
+
+
+
+
+
+//
+// Organiser sheet class
+//   Name               organiser name
+//
+function Organiser(row) {
+    this.copyFields(row);
+    Organiser.organisers[this.Name] = this;
+};
+
+Organiser.optional = true;
+Organiser.organisers = {};
+Organiser.sheetName = 'Organisers';
+Organiser.requiredFields = ['Name'];
+Organiser.optionalFields = [];
+Organiser.prototype.extraFields = [];
+Organiser.load = Param.load;
+Organiser.prototype.copyFields = Param.prototype.copyFields;
+Organiser.prototype.showFields = Location.prototype.showFields;
+
+
+
+
+
+//
+// Event sheet class
+//   event.events       array of events in start date order
+//   Acronym            unique id of event
+//   Start              start date
+//   startTime          time in seconds of Start date
+//   Location           location of event
+//   Title              title of event
+//
+//   countries          collection of Country objects
+//     Country.name             name of country
+//     Country.eventID          acronym of country
+//     Country.delegates        array of people UIDs
+//
+//  Event.initialise            initialise event data
+//  setup                       setup individual event data
+//  fullTitle                   return title of event
+//  setMarker                   setup marker on map
+//  setAttendanceLines          setup country lines on map
+//
+//  Event.clearMapAllEvents     hide all events on map
+//  Event.toggleMapEvent        toggle event visibility on map
+//  showMapEvent                display event on map
+//
+//  showInfoEvent               display info in event tab
+//  currentIndex                index of current event
+//  setHeader                   set header in event tab
+//  Event.showMenuCountriesUI   UI handler for showMenuCountries
+//  showMenuCountries           display info in country tab
+//  showFields                  display extra fields in event tab
+//  Event.findById              find an event in Event.events
+//
+//  Event.eventHeader           event tab element
+//  Event.eventBody             event tab element
+//  Event.countryMenuList       country tab element
+//  Event.countryMenuHeader     country tab element
+//  Event.countryMenuItem       country tab element
+//
+//  acronymCell                 cell in Rows
+//
+function Event(row) {
+    this.copyFields(row);
+    if (isBlank(this.Acronym)) return;
+
+    this.countries = {};
+    this.filtered = true;
+    this.startTime = Date.parse(this.Start.replace(/([0-9]+)\/([0-9]+)\//, '$2/$1/'));
+
+    if (isNaN(this.startTime)) {
+        this.startTime = Date.parse(this.Start.replace(/[\/ -]/, '/1/'));
+    }
+
+    if (isNaN(this.startTime)) {
+        this.startTime = -Infinity;
+    }
+
+    this.location = Location.locations[this.Location];
+    if (!this.location) {
+        Load.message(`Unknown location ${this.Location} for ${this.Acronym}`);
+        return;
+    }
+
+    if (!this.location.hasEvent) {
+        Event.locations[this.Location] = this.location;
+        this.location.countryLines = {};
+        this.location.hasEvent = ++Event.locationsCount;
+    }
+
+    this.organiser = Organiser.organisers[this.Organiser];
+
+    Event.events.push(this);
+};
+
+Event.events = [];
+Event.sheetName = 'Events';
+Event.requiredFields = ['Acronym'];
+Event.optionalFields = ['Title'];
+Event.prototype.extraFields = [];
+
+Event.load = Param.load;
+Event.prototype.copyFields = Param.prototype.copyFields;
+Event.prototype.showFields = Location.prototype.showFields;
+
+Event.locations = {};
+Event.locationsCount = 0;
+
+
+// create a new delegate list if country is not in collection
+Event.prototype.addDelegate = function(origin, acronym, uid) {
+    if (origin) {
+        var country = this.countries[origin];
+        if (!country) {
+            country = new Country(origin, acronym);
+            this.countries[origin] = country;
+        }
+        country.delegates.push(uid);
+
+        this.location.countryLines[origin] = {origin};
+    }
+};
+
+// initilise, setup, fullTitle, setMarker, setAttendanceLines
+//   set up events
+//
+Event.initialise = function() {
+    Event.eventHeader = document.getElementById( 'eventinfoheader' );
+    Event.eventBody = document.getElementById( 'eventinfobody' );
+    Event.countryMenuList = document.getElementById( 'countrymenulist' );
+    Event.countryMenuHeader = document.getElementById( 'countrymenuheader' );
+    Event.countryMenuItem = document.getElementById( 'countrymenuitem' ).cloneNode( true );
+
+    Event.events.sort((a, b) => a.startTime - b.startTime);
+    Event.events.forEach((event, index) => event.cellIndex = index + 1);
+
+    Event.locationsArray = [];
+    for (var place in Event.locations) {
+        const location = Event.locations[place];
+        location.setup(place);
+        Event.locationsArray.push(location);
+    }
+
+    new DropDown('location', Event.locationsArray);
+
+    CountryLine.originsArray = [];
+    for (var place in CountryLine.origins) {
+        const location = CountryLine.origins[place];
+        location.originMarker = L.circleMarker(location.latLng, {
+                radius: Const.originMarkerIconSize,
+                color: location.Color || Const.originMarkerColor,
+                opacity: Const.originMarkerOpacity,
+                zIndexOffset: 1000,
+            }).
+            bindTooltip(place, {
+                direction: 'top',
+                className: 'eventMarker',
+            }).
+            on('click', Location.selectOrigin, location).
+            addTo(Chart.map);
+
+        CountryLine.originsArray.push(location);
+    };
+
+    new DropDown('origin', CountryLine.originsArray);
+};
+
+
+Event.prototype.getLabel = function() {
+    return (Const.acronyms || !this.organiser || !this.organiser.Name) ?
+        this.Acronym :
+        this.organiser.Name;
+};
+
+Event.prototype.fullTitle = function() {
+    return joinText([this.getLabel(), ' ', this.Title, ' - ', this.location.Place, ' ', this.Start, '-', this.End]);
+};
+
+// Event.clearMapAllEvents, Event.selectMapAllEvents, Event.filter, Event.toggleMapEvent, Event.showMapEvent
+//   handle event visibility on map
+//
+Event.selectMapAllEvents = function() {
+    Event.events.forEach((event) => event.showMapEvent(true));
+    Location.renderMap();
+};
+
+Event.clearMapAllEvents = function() {
+    Event.events.forEach((event) => event.showMapEvent(false));
+    Location.renderMap();
+};
+
+Event.filterUI = function(ev) {
+    if (ev.key == 'Enter') {
+        Event.filter();
+        ev.preventDefault();
+        return false;
+    }
+};
+
+Event.setLabels = function(value) {
+    Param.setConfig('acronyms', value);
+    Event.filter();
+};
+
+Event.filter = function() {
+    const eventPattern = document.getElementById('eventPattern').value;
+    const regex = new RegExp(eventPattern.
+        replace(/\./g, '\\.').
+        replace(/\+/g, '\\+').
+        replace(/\*/g, '.*').
+        replace(/\?/g, '.')
+    );
+
+    const timePattern = DateRange.startRange.time < DateRange.finishRange.time;
+
+    const locationPatternValue = document.getElementById('locationPattern').value;
+    const locationPattern = `|${locationPatternValue}|`;
+
+    const originPattern = document.getElementById('originPattern').value;
+
+    Event.events.forEach ((event, index) => {
+        event.filtered =
+            (!eventPattern || regex.test(event.getLabel())) &&
+            (!timePattern || (event.startTime >= DateRange.startRange.time && event.startTime <= DateRange.finishRange.time)) &&
+            (!locationPatternValue || locationPattern.includes(`|${event.Location}|`)) &&
+            (!originPattern || event.hasOrigin(originPattern));
+
+        Array.from(TimeLine.acronymTable.rows).forEach((row) => {
+            row.cells[index+1].style.display = event.filtered ? 'table-cell' : 'none';
+        });
+    });
+
+    TimeLine.setLinks();
+    Location.renderMap();
+};
+
+Event.prototype.hasOrigin = function(originPattern) {
+    originPattern = `|${originPattern}|`;
+    for (var country in this.countries) {
+        if (originPattern.includes(`|${country}|`)) return true;
+    }
+    return false;
+};
+
+
+Event.clearInput = function() {
+    document.getElementById('eventPattern').value = '';
+    Event.filter();
+};
+
+
+Event.currentIndex = 0;
+Event.showNext = function(direction, ev) {
+    if (!Event.events.length) return;
+
+    var newIndex = Event.currentIndex;
+    do {
+        newIndex += direction;
+        if (!direction) direction = 1;
+        if (newIndex < 0) newIndex = Event.events.length - 1;
+        if (newIndex >= Event.events.length) newIndex = 0;
+        const event = Event.events[newIndex];
+        if (event.filtered) {
+            if (ev) {
+                if (ev.shiftKey) {
+                    event.toggleMap();
+
+                } else if (ev.ctrlKey || ev.metaKey) {
+                    Event.toggleMapIndex(Event.currentIndex, false);
+                    event.toggleMap(true);
+                }
+                ev.preventDefault();
+            }
+
+            event.showInfoEvent();
+            TimeLine.scroll(event);
+            return false;
+        }
+    } while (Event.currentIndex != newIndex);
+};
+
+Event.toggleMapEvent = function(eventId, state) {
+    const event = Event.findById(eventId);
+    event.toggleMap(state);
+};
+
+Event.toggleMapIndex = function(index, state) {
+    const event = Event.events[index];
+    event.toggleMap(state);
+};
+
+Event.prototype.toggleMap = function(state) {
+    this.showMapEvent(state == undefined ? !this.shownOnMap : state);
+    Location.renderMap();
+};
+
+
+Event.prototype.showMapEvent = function(state) {
+    this.shownOnMap = state;
+
+    const color = state ? this.location.color : 'black';
+    Array.from(TimeLine.acronymTable.rows).forEach((row) => {
+        const cell = row.cells[this.cellIndex];
+        cell.style.color = cell.style.borderColor = color;
+    });
+
+    if (state) {
+        this.showInfoEvent();
+    }
+};
+
+Event.prototype.showAcronymEvent = function(state) {
+};
+
+// showInfoEvent, setHeader, Event.showMenuCountriesUI, showMenuCountries, showFields
+//   display information in event and country tabs
+//
+Event.prototype.showInfoEvent = function() {
+    this.setHeader( Event.eventHeader );
+
+    const locationFields = this.location ? this.location.showFields(this.location.extraFields) : '';
+    const organiserFields = this.organiser ? this.organiser.showFields(this.organiser.extraFields) : '';
+
+    Event.eventBody.innerHTML = this.showFields(this.extraFields) + locationFields + organiserFields;
+
+    this.highlight();
+    this.showMenuCountries();
+    Tab.show( 'eventinfo' );
+};
+
+Event.prototype.setHeader = function( header ) {
+    header.innerHTML = joinText([this.getLabel(), ' ', this.Title]);
+    header.value = this.Acronym;
+};
+
+Event.prototype.highlight = function() {
+    Event.events.forEach ((event, index) => {
+        var backgroundColor = 'initial';
+        if (event == this) {
+            Event.currentIndex = index;
+            backgroundColor = 'lightgrey';
+        }
+
+        Array.from(TimeLine.acronymTable.rows).forEach((row) => {
+            row.cells[index+1].style.backgroundColor = backgroundColor;
+        });
+    })
+};
+
+
+Event.showMenuCountriesUI = function( eventId ) {
+    var event = Event.findById( eventId );
+    event.showMenuCountries();
+};
+
+Event.prototype.showMenuCountries = function( ev ) {
+    var countries = [];
+    var delegates = [];
+    for( var countryName in this.countries ) {
+        var country = this.countries[countryName];
+        delegates = delegates.concat( country.delegates );
+        countries.push( country );
+    }
+
+    countries.sort( function( a, b ) {
+        if( a.name > b.name ) return 1;
+        if( a.name < b.name ) return -1;
+        return 0;
+    } );
+
+    this.setHeader( Event.countryMenuHeader );
+
+    var child;
+    while( (child = Event.countryMenuList.lastChild) ) {
+        removeElement( child );
+    }
+
+    countries.forEach( function( country ) {
+        var item = Event.countryMenuItem.cloneNode( true );
+        item.textContent = `${country.name}: ${country.delegates.length}`;
+        item.value = country;
+        Event.countryMenuList.appendChild( item );
+    } );
+
+    Person.showMenuPeople( this, '', delegates );
+};
+
 // Look up an acronym
 Event.findById = function( acronym ) {
     return Event.events.find( function( event ) {
         return event.Acronym == acronym;
     } );
 };
+
+
+
+
+
+//
+// DropDown class for drop down lists
+//
+function DropDown(prefix, list) {
+    this.prefix = prefix;
+    this.list = list;
+    this.list.sort((a, b) => a.Place.localeCompare(b.Place));
+    this.container = document.getElementById(prefix + 'Container');
+    this.pattern = document.getElementById(prefix + 'Pattern');
+    DropDown.dropDowns[prefix] = this;
+};
+DropDown.dropDowns = {};
+
+DropDown.method = function(method, instant, arg1, arg2) {
+    const me = DropDown.dropDowns[instant];
+    if (me && me[method]) {
+        me[method].call(me, arg1, arg2);
+    } else {
+        console.log(`Unknown method ${method} of ${instant}`);
+    }
+};
+
+
+DropDown.prototype.createSelect = function() {
+    var html = `
+    <select
+        id="${this.prefix}Select"
+        class="selectPattern"
+        multiple
+        onkeydown="DropDown.method('keyDown', '${this.prefix}', event)"
+        onclick="DropDown.method('choose', '${this.prefix}', event)"
+        onblur="DropDown.method('closeSelect', '${this.prefix}', event)"
+    >
+    <option value="">Any ${this.prefix}</option>
+    `;
+
+    const pattern = `|${this.pattern.value}|`;
+    this.list.forEach ((location) => {
+        html += `
+            <option
+                value="${location.Place}"
+                ${pattern.includes(`|${location.Place}|`) ? 'selected' : ''}
+            >${location.Place}</option>
+        `;
+    });
+
+    html += '</select>';
+    this.container.innerHTML = html;
+    this.select = this.container.firstElementChild;
+
+    this.select.size = this.list.length + 1;
+    do {
+        var top = this.select.getBoundingClientRect().top;
+    } while (top < 0 && --this.select.size > 2);
+
+    this.select.focus();
+};
+
+
+DropDown.prototype.closeSelect = function() {
+    this.container.innerHTML = '';
+    this.select = false;
+};
+
+DropDown.prototype.toggleSelect = function(ev) {
+    if (this.select) {
+        this.closeSelect();
+    } else {
+        this.createSelect();
+    }
+
+    ev.preventDefault();
+}
+
+DropDown.prototype.keyDown = function(ev) {
+    if (ev.code == 'Enter') {
+        this.closeSelect();
+    } else {
+        setTimeout(() => this.choose(ev));
+    }
+};
+
+DropDown.prototype.choose = function(ev) {
+    var text = '';
+    for (var opt = this.select.firstElementChild; opt; opt = opt.nextElementSibling) {
+        if (opt.selected) {
+            text = joinText([text, '|', opt.value]);
+        }
+    };
+    this.pattern.value = text;
+
+    Event.filter();
+};
+
+
+DropDown.prototype.clear = function() {
+    this.pattern.value = '';
+
+    Event.filter();
+};
+
+
+// methods called by modify
+DropDown.prototype.set = function(item) {
+    this.pattern.value = item;
+};
+
+DropDown.prototype.add = function(item) {
+    var pattern = `|${this.pattern.value}|`;
+    if (pattern.includes(`|${item}|`)) return false;
+    pattern += item;
+    this.pattern.value = pattern.replace(/^\|*/, '');
+    return true;
+};
+
+DropDown.prototype.remove = function(item) {
+    this.pattern.value =
+        `|${this.pattern.value}|`.
+        replace(`|${item}|`, '|').
+        replace(/^\|*/, '').
+        replace(/\|*$/, '');
+};
+
+DropDown.prototype.toggle = function(item) {
+    if (this.add(item)) return;
+    this.remove(item);
+};
+
+DropDown.prototype.modify = function(item, ev) {
+    if (ev.shiftKey) this.add(item);
+    else if (ev.ctrlKey || ev.metaKey) this.toggle(item);
+    else this.set(item);
+
+    Event.filter();
+};
+
+
 
 
 
@@ -654,51 +1120,22 @@ Event.findById = function( acronym ) {
 //   eventID    acronym of event
 //   delegates  array of UIDs
 //
-//   Country.addDelegate        add delegate to a country collection
-//   highlightLine              bright/dim attendance line
-//   Country.showMenuPeopleLineUI  Interface to showMenuPeopleLine
+//   showMenuPeopleLineUI       Interface to showMenuPeopleLine
 //   showMenuPeopleLine         display delegates in attend tab
-//   showLine                   show/hide attendance line on map
 //
-function Country( where, acronym ) {
+function Country(where, acronym) {
     this.name = where;
     this.eventID = acronym;
     this.delegates = [];
 }
 
-// create a new delegate list if country is not in collection
-Country.addDelegate = function( countries, where, acronym, uid ) {
-    if( where ) {
-        var country = countries[where];
-        if( !country ) {
-            country = new Country( where, acronym );
-            countries[where] = country;
-        }
-        country.delegates.push( uid );
-        return true;
-    }
-    return false;
-};
-
-Country.prototype.highlightLine = function( ev ) {
-    this.line.setStyle( {
-        opacity: ev.type === 'mouseover' ? 1 : Const.lineOpacity
-    } );
-};
-
-Country.showMenuPeopleLineUI = function( country ) {
+Country.showMenuPeopleLineUI = function(country) {
     country.showMenuPeopleLine();
 };
 
 Country.prototype.showMenuPeopleLine = function() {
-    var event = Event.findById( this.eventID );
-    Person.showMenuPeople( event, this.name, this.delegates );
-};
-
-Country.prototype.showLine = function( action ) {
-    if( this.line ) {
-        this.line[action]( Chart.map );
-    }
+    var event = Event.findById(this.eventID);
+    Person.showMenuPeople(event, this.name, this.delegates);
 };
 
 
@@ -712,7 +1149,7 @@ Country.prototype.showLine = function( action ) {
 //   FirstName          first name(s) of person
 //   LastName           last name(s) of person (for sorting)
 //   name               first and last name of person
-//   events             array of events attended
+//   peopleAtEvents     array PeopleAtEvents fields
 //
 //  People.initialise   initialise people data
 //  setup               setup individual person data
@@ -732,7 +1169,7 @@ function Person( row ) {
     this.copyFields( row );
 
     this.name = joinText([ this.FirstName, ' ', this.LastName ]);
-    this.events = [];
+    this.peopleAtEvents = [];
 
     Person.people[this.UID] = this;
 };
@@ -760,7 +1197,7 @@ Person.initialise = function() {
 //
 Person.showMenuPeople = function( event, subtitle, delegates ) {
     Person.menuHeader.innerHTML =
-        joinText([ event.Acronym, ' ', event.Title, ' from ', subtitle ]);
+        joinText([event.getLabel(), ' ', event.Title, ' from ', subtitle]);
 
     Person.peopleMenu = [];
     delegates.forEach( function( delegate ) {
@@ -799,11 +1236,24 @@ Person.prototype.showInfoPerson = function() {
     Person.personHeader.value = this.UID;
 
     Person.personBody.innerHTML = this.showFields( this.extraFields );
+    this.peopleAtEvents.forEach ((personAtEvent) => {
+        Person.personBody.innerHTML += `
+            <br/>
+            <span class="biotabevent"
+                onclick="Event.findById('${personAtEvent.Acronym}').showInfoEvent()"
+                title="${personAtEvent.event.fullTitle()}"
+            >
+                ${joinText([personAtEvent.event.getLabel(), ' ', personAtEvent.event.Title])}
+            </span><br/>
+            Start: ${personAtEvent.event.Start}<br/>
+            ${personAtEvent.showFields(personAtEvent.extraFields)}
+            `;
+    });
 
     Tab.show( 'personinfo' );
 };
 
-Person.prototype.showFields = Event.prototype.showFields;
+Person.prototype.showFields = Location.prototype.showFields;
 
 
 
@@ -814,23 +1264,22 @@ Person.prototype.showFields = Event.prototype.showFields;
 //   UID                person UID
 //   Acronym            event acronym
 //
-function PeopleAtEvents( row ) {
-    this.copyFields( row );
-    if( isBlank( this.UID ) ) return;
+function PeopleAtEvents(row) {
+    this.copyFields(row);
+    if (isBlank(this.UID)) return;
 
-    var uid = this.UID;
-    var acronym = this.Acronym;
+    const uid = this.UID;
+    const acronym = this.Acronym;
 
-    var person = Person.people[uid];
-    var event = Event.findById( acronym );
+    const person = Person.people[uid];
+    this.event = Event.findById(acronym);
 
-    if( person && event ) {
-        person.events.push( acronym );
-
-        Country.addDelegate( event.countries, person.Origin, acronym, uid );
+    if (person && this.event) {
+        person.peopleAtEvents.push(this);
+        this.event.addDelegate(person.Origin, acronym, uid);
 
     } else {
-        Load.message( 'Unknown PersonAtEvents ' + uid + ', ' + acronym );
+        Load.message(`Unknown PersonAtEvents ${uid}, ${acronym}`);
     }
 };
 
@@ -841,6 +1290,7 @@ PeopleAtEvents.optionalFields = [];
 PeopleAtEvents.prototype.extraFields = [];
 PeopleAtEvents.load = Param.load;
 PeopleAtEvents.prototype.copyFields = Param.prototype.copyFields;
+PeopleAtEvents.prototype.showFields = Location.prototype.showFields;
 
 
 
@@ -956,161 +1406,212 @@ Tab.show = function( elementName ) {
 //
 // TimeLine class       display time line
 //
-function TimeLine( tableName ) {
-    var table = document.getElementById( tableName );
-    for( var rowIndex = 0; rowIndex < table.rows.length; ++rowIndex ) {
-        var row = table.rows[rowIndex];
-        var cell = table.rows[rowIndex].cells[0];
-        for( var year = Const.startYear; year < Const.finishYear; year += Const.labelYear ) {
-            if( !isBlank( cell.innerHTML ) ) {
-                cell.innerHTML = year.toString();
-            }
-            row.appendChild( cell );
-            cell = cell.cloneNode( true );
-        }
-    }
-
-    TimeLine.show( Const.timeline );
-};
+function TimeLine() {};
 
 TimeLine.show = function( value ) {
     Param.setConfig( 'timeline', value );
-    document.getElementById( 'timeline' ).style.display =
+    document.getElementById( 'timeLine' ).style.display =
         Const.timeline ? 'initial' : 'none';
 };
 
-
-
-
-
-//
-// HeaderRow singleton class
-//   container for headerRow class instantiations:
-//   TimelineHeader, AcronymHeader, PersonTemplate
-//
-//   HeaderRow.prefixCells      number of prefix cells (=2)
-//   HeaderRow.tabled           number of cells displayed in acronym bar
-//   HeaderRow.rows             array of headerRow classes
-//     headerRow.row            row element
-//     headerRow.cell           cell element
-//
-//   HeaderRow.create           creates a headerRow class
-//   HeaderRow.initialise       initialise headerRows by event
-//   HeaderRow.setup            initialise headerRow for single event
-//   HeaderRow.appendColumn     add another column for event
-//     headerRow.setupCell      initialise a cell for a headerRow
-//
-//   HeaderRow.highlightEvent   highlight event for all headerRows
-//     headerRow.highlightEvent highlight event for single headerRow
-var HeaderRow = {};
-
-HeaderRow.create = function( rowClass, rowName, cellName ) {
-    var headerRow = new rowClass();
-    headerRow.row = document.getElementById( rowName );
-    headerRow.cell = document.getElementById( cellName );
-    headerRow.prefixCells = headerRow.row.cells.length;
-
-    HeaderRow.rows.push( headerRow );
-
-    return headerRow;
+TimeLine.initialise = function() {
+    TimeLine.initialiseElements();
+    TimeLine.initialiseAcronyms();
+    TimeLine.initialiseLines();
+    DateRange.initialise();
+    TimeLine.show(Const.timeline);
+    Event.setLabels(Const.acronyms);
 };
 
-HeaderRow.rows = [];
-HeaderRow.tabled = 0;
+TimeLine.initialiseElements = function() {
+    TimeLine.startTimeFilter = document.getElementById('startTimeFilter');
+    TimeLine.finishTimeFilter = document.getElementById('finishTimeFilter');
+    TimeLine.startTimeDisplay = document.getElementById('startTimeDisplay');
+    TimeLine.finishTimeDisplay = document.getElementById('finishTimeDisplay');
+    TimeLine.timeShade = document.getElementById('timeShade');
 
-HeaderRow.initialise = function() {
-    Event.events.forEach( function( event ) {
-        HeaderRow.setup( event );
-    } );
-
-    Event.events.forEach( function( event ) {
-        if( isDefined( event.cellIndex ) ) {
-            for( var rowIndex = 0; rowIndex < HeaderRow.rows.length; ++rowIndex ) {
-                var headerRow = HeaderRow.rows[rowIndex];
-                var cell = headerRow.row.cells[event.cellIndex + headerRow.prefixCells];
-                headerRow.setupCell( cell, event );
-            }
-        }
-    } );
-};
-
-HeaderRow.setup = function( event ) {
-    if( !isEmpty( event.countries ) ) {
-        event.cellIndex = HeaderRow.tabled;
-        ++HeaderRow.tabled;
-        HeaderRow.appendColumn();
-    }
-};
-
-HeaderRow.appendColumn = function() {
-    HeaderRow.rows.forEach( function( headerRow ) {
-        headerRow.row.appendChild( headerRow.cell.cloneNode( true ) );
-    } );
-
-    HeaderRow.cellWidth = Const.tableWidth / HeaderRow.tabled;
-};
-
-HeaderRow.highlightEvent = function( event, state ) {
-    HeaderRow.rows.forEach( function( headerRow ) {
-        headerRow.highlightCell && headerRow.highlightCell( state, event );
-    } );
+    TimeLine.timeSVG = document.getElementById('timeSVG');
+    TimeLine.timeLabels = document.getElementById('timeLabels');
+    TimeLine.timeShade = document.getElementById('timeShade');
+    TimeLine.timeBorder = document.getElementById('timeBorder');
+    TimeLine.timeLinks = document.getElementById('timeLinks');
+    TimeLine.acronymTable = document.getElementById('acronymTable');
+    TimeLine.acronymRow = document.getElementById('acronymRow');
+    TimeLine.acronymCell = document.getElementById('acronymCell');
+    TimeLine.scrollable = document.getElementById('scrollable');
+    TimeLine.timeLines = document.getElementById('timeLines');
 };
 
 
-// headerRow classes TimelineHeader, AcronymHeader, PersonTemplate
-//
-function TimelineHeader() {};
+TimeLine.initialiseLines = function() {
+    const box = TimeLine.timeSVG.getBoundingClientRect();
+    TimeLine.left = box.left;
+    TimeLine.right = box.right;
+    TimeLine.width = box.width;
+    const height = 40;
 
-TimelineHeader.prototype.setupCell = function( cell, event ) {
-    function mapPos( x, min, max ) {
-        return mapRange( x, min, max, 100 - Const.tableWidth, 100 );
+    TimeLine.timeBorder.setAttribute('x2', TimeLine.width);
+
+    timeLabels.innerHTML = '';
+    for (var year = Const.startYear; year < Const.finishYear; year += Const.labelYear ) {
+        const x = mapRange(year, Const.startYear, Const.finishYear, 0, TimeLine.width)
+        timeLabels.innerHTML += `
+            <line x1="${x}" x2="${x}" y1="0" y2="${height}" stroke="black"/>
+            <text x="${x+2}" y="${height*2/3}">${year}</text>
+        `;
     }
 
-    function setBackground( left, right, direction ) {
-        var width = right - left;
-        cell.style.left = left + '%';
-        cell.style.width = width + '%';
-
-        if( width > 0.2 ) {
-            cell.style.background =
-                'linear-gradient(to bottom ' + direction + ', ' +
-                'transparent, transparent ' + (50-Const.linkWidth) + '%, ' +
-                event.color + ' ' + (50-Const.linkWidth) + '%, ' +
-                event.color + ' ' + (50+Const.linkWidth) + '%, ' +
-                'transparent ' + (50+Const.linkWidth) + '%, transparent)';
+    timeLinks.innerHTML = '';
+    Event.events.forEach ((event) => {
+        let line;
+        if (event.startTime >= Const.startTime) {
+            const x = mapRange(event.startTime, Const.startTime, Const.finishTime, 0, TimeLine.width);
+            line = `<line x1="${x}" x2="${x}" y1="${height+2}" y2="${height*2+2}" stroke="${event.location.color}" stroke-width="2" />`;
 
         } else {
-            cell.style.backgroundColor = event.color;
+            line = `<line x1="-1" x2="-1" y1="${height*2}" y2="${height*2}" stroke-width="0" stroke-color="black" />`;
         }
+
+        timeLinks.innerHTML += line;
+    });
+
+    TimeLine.setLinks();
+};
+
+//
+// Draw the timeLine links
+//
+TimeLine.setLinks = function() {
+     Event.events.forEach((event, index) => {
+        const timeLink = TimeLine.timeLinks.children[index];
+        const cell = TimeLine.acronymRow.cells[index+1];
+        const box = cell.getBoundingClientRect();
+        if (event.filtered && box.right >= TimeLine.left && box.left <= TimeLine.right) {
+            timeLink.style.display = 'inherit';
+            const midPoint = box.left - TimeLine.left + box.width/2;
+            timeLink.setAttribute('x2', midPoint);
+
+        } else {
+            timeLink.style.display = 'none';
+        }
+    });
+};
+
+TimeLine.initialiseAcronyms = function() {
+    Event.events.forEach ((event, index) => {
+        event.acronymCell = TimeLine.acronymCell.cloneNode(true);
+        event.acronymCell.innerHTML = `
+            ${event.getLabel()}<br/>
+            <span class="tiny">${event.Start}</span><br/>
+            <span class="tiny">${event.Title}</span>
+        `;
+        event.acronymCell.value = index;
+        event.acronymCell.title = joinText([event.Acronym, ' ', dateToString(event.startTime)]);
+        TimeLine.acronymRow.appendChild(event.acronymCell);
+    });
+};
+
+TimeLine.scroll = function(event) {
+    const rowRect = TimeLine.acronymRow.getBoundingClientRect();
+    const timeLinesRect = TimeLine.timeLines.getBoundingClientRect();
+    const cellRect = event.acronymCell.getBoundingClientRect();
+    const mid = cellRect.left + cellRect.width/2;
+
+    if (mid < timeLinesRect.left || mid > timeLinesRect.right) {
+        TimeLine.scrollable.scrollTo({
+            behavior: 'smooth',
+            left: cellRect.left - rowRect.left - (timeLinesRect.left + timeLinesRect.width/2),
+        });
     };
+};
 
-    var upper = mapPos( event.startTime, Const.startTime, Const.finishTime );
-    var lower = mapPos( event.cellIndex+0.5, 0, HeaderRow.tabled );
-    if( upper < lower ) {
-        setBackground( upper, lower, 'left' );
 
-    } else {
-        setBackground( lower, upper, 'right' );
+//
+// DateRange
+// controller for input date ranges
+//
+function DateRange(name) {
+    const rangeContainer = document.getElementById(name);
+    this.rangeInput = rangeContainer.getElementsByClassName('rangeInput')[0];
+    this.timeDisplay = rangeContainer.getElementsByClassName('timeDisplay')[0];
+    this.rangeInput.min = Const.startTime;
+    this.rangeInput.max = Const.finishTime;
+    this.rangeInput.value = Const.startTime;
+
+    this.setTime(Const.startTime);
+};
+
+DateRange.initialise = function() {
+    DateRange.startRange = new DateRange('startRange');
+    DateRange.finishRange = new DateRange('finishRange');
+    DateRange.setStep(document.querySelector('input[name=dateStep]:checked').value);
+};
+
+DateRange.setStep = function(stepName) {
+    DateRange.stepName = stepName;
+
+    DateRange.startRange.rangeInput.step =
+    DateRange.finishRange.rangeInput.step =
+    DateRange.step = {
+        year: Const.msInYear,
+        month: Const.msInMonth,
+        day: Const.msInDay,
+        hour: Const.msInHour,
+        minute: Const.msInMinute,
+    }[stepName];
+};
+
+DateRange.startRangeUI = function() {
+    DateRange.startRange.adjustValue(DateRange.finishRange);
+};
+
+DateRange.finishRangeUI = function() {
+    DateRange.finishRange.adjustValue(DateRange.startRange);
+};
+
+DateRange.prototype.adjustValue = function(otherRange) {
+    const startRange = DateRange.startRange;
+    const finishRange = DateRange.finishRange;
+    var newTime = +this.rangeInput.value;
+
+    const date = new Date(this.time);
+    const difference = Math.round((newTime - this.time) / DateRange.step);
+    switch (DateRange.stepName) {
+    case 'year':
+        date.setYear(date.getYear() + difference);
+        newTime = date.getTime();
+        break;
+
+    case 'month':
+        date.setMonth(date.getMonth() + difference);
+        newTime = date.getTime();
+        break;
     }
+
+    if (+startRange.rangeInput.value > +finishRange.rangeInput.value) {
+        otherRange.setTime(newTime);
+    }
+
+    this.setTime(newTime);
+
+    const left = startRange.convertTime();
+    TimeLine.timeShade.setAttribute('x', left);
+    const right = finishRange.convertTime();
+    TimeLine.timeShade.setAttribute('width', right-left);
+
+    Event.filter();
 };
 
-function AcronymHeader() {};
+DateRange.prototype.setTime = function(time) {
+    this.time = time;
+    this.rangeInput.value = time;
 
-AcronymHeader.prototype.setupCell = function( cell, event ) {
-    cell.style.width = HeaderRow.cellWidth + '%';
-    cell.innerHTML = event.Acronym;
-    cell.title = event.fullTitle();
+    this.timeDisplay.textContent = dateToString(this.time);
 };
 
-AcronymHeader.prototype.highlightCell = function( state, event ) {
-    this.row.cells[event.cellIndex + this.prefixCells].style.color =
-        state ? event.color : 'black';
-};
 
-function PersonTemplate() {};
-
-PersonTemplate.prototype.setupCell = function( cell, event ) {
-    cell.style.width = HeaderRow.cellWidth + '%';
+DateRange.prototype.convertTime = function() {
+    return mapRange(this.time, Const.startTime, Const.finishTime, 0, TimeLine.width);
 };
 
 
@@ -1140,16 +1641,14 @@ PersonTemplate.prototype.setupCell = function( cell, event ) {
 //   controlCell                control cell element
 //   controlIndex               cell index of control cell
 //
-function Sandbox( tableName, personTemplate ) {
-    this.table = document.getElementById( tableName );
-    this.template = personTemplate;
+function Sandbox(tableName, rowName) {
+    this.table = document.getElementById(tableName);
+    this.template = document.getElementById(rowName);
 
-    this.firstCell = document.getElementById( 'firstcell' ).cloneNode( true );
-    this.controlCell = document.getElementById( 'controlcell' ).cloneNode( true );
+    this.firstCell = document.getElementById('sandboxControlFirst');
+    this.controlCell = document.getElementById('sandboxControlMiddle');
 };
 
-Sandbox.prototype.controlIndex = 0;
-Sandbox.prototype.nameIndex = 1;
 
 Sandbox.addPeopleUI = function() {
     Person.peopleMenu.forEach( function( person ) {
@@ -1161,34 +1660,38 @@ Sandbox.addPersonUI = function( personId ) {
     Sandbox.group.addPerson( personId );
 };
 
-Sandbox.prototype.addPerson = function( personId ) {
-    for( var rowIndex = 0; rowIndex < this.table.rows.length; ++rowIndex ) {
-        if( personId == this.table.rows[rowIndex].cells[this.nameIndex].value ) return;
+Sandbox.prototype.addPerson = function(personId) {
+    if (Array.from(this.table.rows).some((row) => personId == row.value)) {
+        return;
     }
 
-    var person = Person.people[personId];
-    var row = this.template.row.cloneNode( true );
-    var prefixCells = this.template.prefixCells;
+    const person = Person.people[personId];
+    const row = this.template.cloneNode(true);
 
-    row.cells[this.nameIndex].innerHTML = person.name;
-    if( person.Role ) {
-        row.cells[this.nameIndex].title = person.Role;
+    const nameElement = row.getElementsByClassName('sandboxName')[0];
+    nameElement.textContent = person.name;
+    nameElement.value = person.UID;
+    if (person.Role) {
+        nameElement.title = person.Role;
     }
-    row.cells[this.nameIndex].value = person.UID;
+    row.value = person.UID;
 
-    person.events.forEach( function( id ) {
-        var cellIndex = Event.findById( id ).cellIndex;
-        if( isDefined( cellIndex ) ) {
-            row.cells[cellIndex + prefixCells].innerHTML = '&bull;';
-        }
-    } );
+    Event.events.forEach((event) => {
+        const newCell = document.createElement('td');
+        newCell.className = 'sandboxCell';
+        newCell.innerHTML = person.peopleAtEvents.some((personEvent) => personEvent.Acronym == event.Acronym) ? '&bull;' : '';
+        newCell.style.color = newCell.style.borderColor = event.shownOnMap ? event.location.color : 'black';
+        row.appendChild(newCell);
+    });
 
-    this.table.appendChild( row );
-    this.replaceControlCell( this.table.rows[0], this.firstCell );
+    this.table.appendChild(row);
+    this.replaceControlCell(this.table.rows[0], this.firstCell);
+
+    Event.filter();
 };
 
-Sandbox.moveRowUI = function( button, direction ) {
-    Sandbox.group.moveRow( button.parentNode.parentNode, direction );
+Sandbox.moveRowUI = function(button, direction) {
+    Sandbox.group.moveRow(button.closest('.sandboxRow'), direction);
 };
 
 Sandbox.prototype.moveRow = function( row, direction, clone ) {
@@ -1215,36 +1718,29 @@ Sandbox.prototype.moveRow = function( row, direction, clone ) {
         row.nextSibling &&
             this.table.insertBefore( row, row.nextSibling.nextSibling );
         break;
+
+    case 'clear':
+        removeElement(row);
+        break;
+
+    case 'clearToBottom':
+        var nextRow;
+        do {
+            nextRow = row.nextSibling;
+            removeElement(row);
+            row = nextRow;
+        } while(row);
+        break;
     }
 
     this.replaceControlCell( this.table.rows[0], this.firstCell );
 };
 
-Sandbox.prototype.replaceControlCell = function( row, cell ) {
-    row.replaceChild( cell.cloneNode( true ), row.cells[this.controlIndex] );
-};
-
-Sandbox.clearRowUI = function( button ) {
-    Sandbox.group.clearRow( button.parentNode.parentNode );
-};
-
-Sandbox.prototype.clearRow = function( row ) {
-    removeElement( row );
-    this.table.rows[0] &&
-        this.replaceControlCell( this.table.rows[0], this.firstCell );
-};
-
-Sandbox.clearRowsToBottomUI = function( button ) {
-    Sandbox.group.clearRowsToBottom( button.parentNode.parentNode );
-};
-
-Sandbox.prototype.clearRowsToBottom = function( row ) {
-    var nextRow;
-    do {
-        nextRow = row.nextSibling;
-        removeElement( row );
-        row = nextRow;
-    } while( row );
+Sandbox.prototype.replaceControlCell = function(row, cell) {
+    if (row) {
+        const sandboxControl = row.getElementsByClassName('sandboxControl')[0];
+        sandboxControl.parentElement.replaceChild(cell.cloneNode(true), sandboxControl);
+    }
 };
 
 Sandbox.clearRowsAllUI = function() {

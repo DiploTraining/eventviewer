@@ -2,8 +2,10 @@
 <html>
 <head>
     <!--
-    Copyright 2017,2019 Tarim
-    Development funded by Bristol University Afro-Asian Studies Network
+    Copyright 2017,2019,2023 Tarim
+    Development funded by:
+        Bristol University Afro-Asian Studies Network
+        King's College London Diplomatic Training Studies
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -40,6 +42,8 @@
 
     <div id="map"></div>
 
+    <!-- Tabs -->
+
     <div id="info">
         <table id="infotabs"><tr>
             <td id="eventinfotab" class="tab" onclick="Tab.show(this.value)">Event</td>
@@ -50,19 +54,25 @@
         </tr></table>
 
         <div id="eventinfo" class="tabbox">
-            <div id="eventinfoheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></div>
+            <table class="nexteventtable"><tr>
+                <td id="eventinfoheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></td>
+            </tr></table>
             <div id="eventinfobody" class="tabbody"></div>
         </div>
 
         <div id="countrymenu" class="tabbox">
-            <div id="countrymenuheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></div>
+            <table class="nexteventtable"><tr>
+                <td id="countrymenuheader" class="tabheader" onclick="Event.showMenuCountriesUI(this.value)"></td>
+            </tr></table>
             <div id="countrymenulist">
                 <div id="countrymenuitem" class="tabitem" onclick="Country.showMenuPeopleLineUI(this.value)"></div>
             </div>
         </div>
 
         <div id="peoplemenu" class="tabbox">
-            <div id="peoplemenuheader" class="tabheader" onclick="Sandbox.addPeopleUI()"></div>
+            <table class="nexteventtable"><tr>
+                <td id="peoplemenuheader" class="tabheader" onclick="Sandbox.addPeopleUI()"></td>
+            </tr></table>
             <div id="peoplemenulist">
                 <div id="peoplemenuitem" class="tabitem" onclick="Person.showInfoPersonUI(this.value)"></div>
             </div>
@@ -74,66 +84,180 @@
         </div>
 
         <div id="configinfo" class="tabbox">
-            <div class="tabitem" title="Reset map position and zoom" onclick="Chart.reset()">Reset map</div>
-            <div id="configlabeled" title="Toggle country labels on map" class="tabitem" onclick="Chart.setLabels();">Labels: <span>off</span></div>
-            <div id="configtimeline" title="Toggle visibility of timeline above acronym bar" class="tabitem" onclick="TimeLine.show();">Time Line: <span>off</span></div>
+            <div class="tabitem" onclick="Chart.reset()" title="Reset map position and zoom">Reset map</div>
+            <div id="configlabeled" class="tabitem" onclick="Chart.setLabels()" title="Toggle country labels on map">Map Labels: <span>off</span></div>
+            <div id="configtimeline" class="tabitem" onclick="TimeLine.show()" title="Toggle visibility of timeline above acronym bar">Time Line: <span>off</span></div>
+            <!-- div id="configacronyms" class="tabitem" onclick="Event.setLabels()" title="Toggle displaying acronym or organisation">Display Acronyms: <span>off</span></div -->
             <div id="configmessage" class="tabbody"></div>
         </div>
     </div>
 
-    <div id="timeline">
-        <table id="yeartable">
-            <tr id="fixedyearrow"><td id="fixedyearcell">Y</td></tr>
-        </table>
+    <!-- TimeLine -->
+    <div id="timeLine"><table class="rows">
+        <tr>
+            <td class="rowControl">
+                <table>
+                    <tr id="startRange">
+                        <td class="label">start</td>
+                        <td class="timeDisplay"></td>
+                        <td><input type="range" class="rangeInput" onchange="DateRange.startRangeUI()" /></td>
+                    </tr>
+                    <tr id="finishRange">
+                        <td class="label">end</td>
+                        <td class="timeDisplay"></td>
+                        <td><input type="range" class="rangeInput" onchange="DateRange.finishRangeUI()" /></td>
+                    </tr>
+                    <tr><td class="filterOptions label" colspan="3">
+                        day
+                        <input type="radio" name="dateStep" value="day" onchange="DateRange.setStep(value)"/>
+                        / month
+                        <input type="radio" name="dateStep" value="month" onchange="DateRange.setStep(value)"/>
+                        / year
+                        <input type="radio" name="dateStep" value="year" onchange="DateRange.setStep(value)" checked />
+                    </td></tr>
+                </table>
+            </td>
+            <td class="rowData" id="timeLines">
+                <svg id="timeSVG" width="100%" height="80">
+                    <g id="timeLabels"></g>
+                    <rect id="timeShade"
+                        x="0" width="0"
+                        y="0" height="40"
+                    />
+                    <line id="timeBorder"
+                        x1="0" x2="0"
+                        y1="40" y2="40"
+                    />
+                    <g id="timeLinks"></g>
+                </svg>
+            </td>
+        </tr>
+    </table></div>
 
-        <table id="timelinetable">
-            <tr id="timelineheader"></tr>
-            <tr><td>&nbsp;</td></tr>
+    <!-- selection popups -->
+    <div class="selectBase">
+        <div
+            id="locationContainer"
+            class="selectContainer"
+        ></div>
+    </div>
+
+    <div class="selectBase">
+        <div
+            id="originContainer"
+            class="selectContainer"
+        ></div>
+    </div>
+
+    <!-- Events -->
+    <div id="scrollable" class="scrollable" onscroll="TimeLine.setLinks()">
+        <table id="acronymTable">
+            <tr id="acronymRow">
+                <td class="rowControl acronymControlBackground">
+                    <table><tr><td>
+                        <input
+                            type="text"
+                            id="eventPattern"
+                            class="pattern"
+                            placeholder="any organiser"
+                            onchange="Event.filter(event)"
+                            onkeydown="Event.filterUI(event)"
+                        />
+
+                        <span
+                            onclick="Event.clearInput()"
+                            title="Clear organiser filter"
+                        > &times; </span>
+                    </td></tr>
+
+                    <tr><td>
+                        <input
+                            type="text"
+                            id="locationPattern"
+                            class="pattern"
+                            placeholder="any location"
+                            onmousedown="DropDown.method('toggleSelect', 'location', event)"
+                            readonly
+                        />
+
+                        <span
+                            onclick="DropDown.method('clear', 'location', event)"
+                            title="Clear location filter"
+                        > &times; </span>
+                    </td></tr>
+
+                    <tr><td>
+                        <input
+                            type="text"
+                            id="originPattern"
+                            class="pattern"
+                            placeholder="any origin"
+                            onmousedown="DropDown.method('toggleSelect', 'origin', event)"
+                            readonly
+                        />
+
+                        <span
+                            onclick="DropDown.method('clear', 'origin', event)"
+                            title="Clear origin filter"
+                        > &times; </span>
+                    </td></tr>
+
+                    <tr><td class="filterOptions">
+                        <span title="Select All" onclick="Event.selectMapAllEvents()"> &#x2B24; </span>
+                        <span title="Clear All" onclick="Event.clearMapAllEvents()"> &xcirc; </span>
+                        <span title="Previous event" onclick="Event.showNext(-1,event)"> &vltri; </span>
+                        <span title="Next event" onclick="Event.showNext(1,event)"> &vrtri; </span>
+                    </td></tr></table>
+                </td>
+                <!-- event columns -->
+            </tr>
+
+            <tbody id="sandboxTable">
+                <!-- people rows -->
+            </tbody>
         </table>
     </div>
 
-    <table>
-        <thead id="headertable">
-        <tr id="acronymheader">
-            <td id="clearallcell"></td>
-            <td id="deselectcell">
-            <span title="Deselect all events" onclick="Event.clearMapAllEvents()">&empty;</span>
-            </td>
+    <div class="template">
+        <table class="template">
+
+        <tr>
+            <th id="acronymCell" class="acronymCell" onclick="Event.toggleMapIndex(+this.value)"></th>
         </tr>
-        </thead>
 
-        <tbody id="persontable">
-        </tbody>
-    </table>
-
-    <table class="template">
-    <tr id="personrow">
-        <td id="controlcell">
-        <span title="Move row to top" onclick="Sandbox.moveRowUI(this,'top')">&and;</span>
-        <span title="Move row up" onclick="Sandbox.moveRowUI(this,'up')">&uarr;</span>
-        <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&darr;</span>
-        <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&or;</span>
-        <span title="Clear row" onclick="Sandbox.clearRowUI(this)">&times;</span>
-        <span title="Clear rows to bottom" onclick="Sandbox.clearRowsToBottomUI(this)">&otimes;</span>
+        <tr id="sandboxRow" class="sandboxRow">
+        <td class="sandboxTitle">
+            <table class="sandboxTitleBorder"><tr class="sandboxControls">
+                <td id="sandboxControlMiddle" class="sandboxControl">
+                    <span title="Move row to top" onclick="Sandbox.moveRowUI(this,'top')">&blacktriangle;</span>
+                    <span title="Move row up" onclick="Sandbox.moveRowUI(this,'up')">&triangle;</span>
+                    <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&triangledown;</span>
+                    <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&blacktriangledown;</span>
+                    <span title="Clear row" onclick="Sandbox.moveRowUI(this,'clear')">&times;</span>
+                    <span title="Clear rows to bottom" onclick="Sandbox.moveRowUI(this,'clearToBottom')">&otimes;</span>
+                </td>
+                <th
+                    class="sandboxName"
+                    onclick="Person.showInfoPersonUI(this.value)"
+                ></th>
+            </tr></table>
         </td>
+        <!-- sandbox events -->
+        </tr>
+        </table>
 
-        <td id="personcell" class="item" onclick="Person.showInfoPersonUI(this.value)"></td>
-    </tr>
-
-    <tr>
-        <td id="firstcell">
-        <span class="grey">&and;</span>
-        <span class="grey">&uarr;</span>
-        <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&darr;</span>
-        <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&or;</span>
-        <span title="Clear row" onclick="Sandbox.clearRowUI(this)">&times;</span>
-        <span title="Clear rows to bottom" onclick="Sandbox.clearRowsToBottomUI(this)">&otimes;</span>
+        <table><tr>
+        <td id="sandboxControlFirst" class="sandboxControl">
+            <span class="grey">&blacktriangle;</span>
+            <span class="grey">&triangle;</span>
+            <span title="Move row down" onclick="Sandbox.moveRowUI(this,'down')">&triangledown;</span>
+            <span title="Move row to bottom" onclick="Sandbox.moveRowUI(this,'bottom')">&blacktriangledown;</span>
+            <span title="Clear row" onclick="Sandbox.moveRowUI(this,'clear')">&times;</span>
+            <span title="Clear rows to bottom" onclick="Sandbox.moveRowUI(this,'clearToBottom')">&otimes;</span>
         </td>
-        <td id="timelinecell">&nbsp;</td>
-        <th id="acronymcell" class="item" onclick="Event.toggleMapEvent(this.innerHTML)"></th>
-        <td id="attendedcell"></td>
-    </tr>
-    </table>
+        </tr></table>
+
+    </div>
 
     <div id="docfooter"></div>
 </body>

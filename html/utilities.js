@@ -43,6 +43,17 @@ function joinText( arr ) {
     return text;
 };
 
+function dateToString(time) {
+    return time == undefined || isNaN(time) || time == -Infinity || time == Infinity ?
+        '' :
+        new Date(time).
+        toLocaleString('en-uk', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        });
+};
+
 function removeElement( element ) {
     element.parentNode.removeChild( element );
 };

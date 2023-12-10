@@ -2,7 +2,7 @@
 
 # Afro Asian Network utilities
 #
-# Copyright Tarim 2013,2014,2015,2016,2017
+# Copyright Tarim 2013,2014,2015,2016,2017,2023
 #
 # AAN Utilities is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
@@ -124,6 +124,66 @@ parse '
 
 
 
+# cmd_mkany FILE.tsv [ FILE.json ]
+# convert any tsv file to json
+#
+cmd_mkany() {
+parse '
+    function setup() {
+        for (j = 1; j <= NF; ++j) {
+            initial = substr ($j, 1, 1);
+
+            remainder = substr ($j, 2);
+            gsub (/[^A-Za-z]/, "", remainder);
+
+            if (substr (remainder, length (remainder)-1) >= "a") {
+                initial = tolower (initial);
+            }
+
+            name[j] = initial remainder;
+        }
+    }
+
+    function prerecord() {
+    }
+'
+} < "${1}" > "${2:-${1%.tsv}}.json"
+
+
+
+# cmd_mkjs FILE.tsv [ FILE.js ]
+# convert tsv file to js
+#
+cmd_mkjs() {
+    local File="$1"
+    local Stem="${2:-${1%.tsv}}"
+    local Output="${2}.js"
+
+awk -F'	' '
+    BEGIN {
+        print "'${Stem}'.load([";
+    }
+
+    {
+        printf ("[");
+        for (j = 1; j <= NF; ++j) {
+            gsub (/"/, "\\\\\\\\\\\\&", $j);
+            printf ("%c%s%c,", 34,$j,34);
+        }
+        print "],";
+    }
+
+    END {
+        print "]);";
+    }
+'
+} < "${1}" > "${2:-${1%.tsv}}.js"
+
+
+
+
+
+#
 # parse FUNCTIONS
 # awk script to parse tsv files
 #
@@ -421,6 +481,221 @@ cmd_mklocations() {
 #
 cmd_mkdoc() {
     pandoc "${DocDir}/instructions.md" -s -c instructions.css -T 'Instructions - Event Viewer' -o "${HTMLDir}/instructions.html"
+}
+
+
+
+
+# cmd_dipconvert PEOPLE_FILE
+# Convert original people to Person, Event, PeopleAtEvents
+#
+cmd_dipconvert() {
+local InputFile="${1}"
+awk -F'	' '
+    BEGIN {
+        OFS = "	";
+        UID = 1;
+        LastName = 2;
+        FirstName = 3;
+        Origin = 4;
+        Gender = 5;
+        Acronym = 6;
+        Course = 7;
+        DateStarted = 8;
+        DateEnded = 9;
+        Grade = 10;
+        Biography = 11;
+        College = 12;
+        Source = 13;
+
+        evLoc["IHEOM"] = "Paris";
+        evLoc["IIAP"] = "Paris";
+        evLoc["IRIC"] = "Yaoundé";
+        evLoc["FSP"] = "Oxford";
+        evLoc["ComSec"] = "London";
+        evLoc["IAG"] = "Geneva";
+        evLoc["IUHEI"] = "Geneva";
+        evLoc["UNITAR"] = "Geneva";
+        evLoc["Columbia"] = "New York";
+        evLoc["AU"] = "Washington DC";
+        evLoc["Makerere"] = "Kampala";
+        evLoc["Nairobi"] = "Nairobi";
+        evLoc["Quaker"] = "New York";
+        evLoc["Cambridge"] = "Cambridge";
+        evLoc["LSE"] = "London";
+        evLoc["CFFMA"] = "Paris";
+        evLoc["MAE"] = "Paris";
+    }
+
+    function people() {
+        print $(UID), $(LastName), $(FirstName), $(Origin), $(Gender), $(Biography) > "Person.tsv";
+    }
+
+    function events() {
+        print acronym, location, $(Acronym), $(Course), $(DateStarted), $(DateEnded) > "Event.tsv";
+    }
+
+    function peopleatevents() {
+        print $(UID), acronym, $(Grade), $(College), $(Source) > "PeopleAtEvents.tsv";
+    }
+
+    function buildacrobydate() {
+        year = substr($(DateStarted), length($(DateStarted)) - 1);
+
+        if ($(Acronym) == "CFFMA") {
+            year = tolower(substr($(Course),1,1));
+
+        } else if ($(Acronym) == "IIAP") {
+            post = substr($(DateStarted), 1, 6) == "01/04/" ? "s" : "l";
+
+        } else if ($(Acronym) == "IUHEI" && $(Course) == "UNITAR Mid-level diplomats programme") {
+            $(Acronym) = "UNITAR";
+
+        } else if ($(Acronym) == "MAE") {
+            month = substr($(DateStarted), 3, 4);
+            if (month == "/08/") {
+                post = "a";
+            } else if (month == "/12/") {
+                post = "d";
+            } else {
+                post = "j";
+            }
+
+        } else if ($(Acronym) == "Nairobi" && length($(DateStarted)) == 4) {
+            post = "x";
+        }
+    }
+
+    function buildacro() {
+        location = evLoc[$(Acronym)];
+
+        pre = $(Acronym);
+        post = "";
+        if ($(Acronym) == "Nairobi") {
+            pre = "NAI";
+        } else if ($(Acronym) == "Columbia") {
+            pre = "COL";
+        }
+
+        if ($(Acronym) == "Nairobi" && $(DateStarted) == "1984") {
+            $(DateStarted) = "01/08/1984";
+
+        } else if ($(Acronym) == "MAE") {
+            post = "x";
+        }
+
+        gsub (/"/, "", $(Course));
+        year = substr($(DateStarted), length($(DateStarted)) - 1);
+        month = substr($(DateStarted), 3, 4);
+
+        split ($(Course), initials, / /);
+        for (j = 1; j in initials; ++j) {
+            post = post tolower (substr (initials[j], 1, 1));
+        }
+
+        if ($(Course) == "Not listed") {
+            post = "x";
+
+        } else if ($(Course) == "DTP") {
+            post = "dtp";
+
+        } else if ($(Course) ~ /^3rd Cycle /) {
+            post = "c3y" substr ($(Course), 11, 1);
+
+        } else if ( \
+                    ( $(Acronym) == "MAE" ||
+                      ($(Acronym) == "IIAP" && year == "83")) &&
+                    month ~ /\/[0-9][0-9]\// \
+        ) {
+            post = post substr (month, 2, 2);
+        }
+
+        acronym = pre year post;
+
+        title = evTitle[$(Acronym)];
+        if ($(Course) && title != substr($(Course), 1, length(title))) {
+            title = title ", " $(Course);
+        }
+    }
+
+    NR == 1 {
+        acronym = "Acronym";
+        location = "Location";
+        $(Acronym) = "Organiser";
+        $(DateStarted) = "Start";
+        $(DateEnded) = "End";
+        $(Course) = "Title";
+        post = "Abbrev";
+        people();
+        events();
+        peopleatevents();
+        next;
+    }
+
+    {
+        buildacro();
+
+        person = $(LastName) $(FirstName) $(Origin) $(Gender);
+        if (prev != $(UID)) {
+            people();
+
+        } else if (personal != prevpersonal || $(Biography) != "") {
+            print "WARNING: ", $(UID), personal, prevpersonal, " **** ", $(Biography);
+        }
+
+        events();
+        peopleatevents();
+
+        prev = $(UID);
+        prevpersonal = personal;
+
+    }' "${InputFile}"
+}
+
+
+# cmd_dipprune EVENTS_FILE
+# Prune file of duplicates
+#
+cmd_dipprune() {
+    local InputFile="${1}"
+    local TmpFile="${InputFile}.tmp"
+
+    mv "${InputFile}" "${TmpFile}"
+    sort -n "${TmpFile}" | uniq > "${InputFile}"
+
+    awk -F'	' '
+    {
+        if (prev == $1) {
+            print prevline;
+            print;
+        }
+
+        prev = $1;
+        prevline = $0;
+    }
+    ' "${InputFile}"
+}
+
+
+# cmd_mklocal FILE
+# make local.js
+#
+cmd_mklocal() {
+    local LocalFile="local.js"
+
+    {
+        grep 'Const\.googleKey' local-key.js
+        cat Param.js Location.js Organiser.js Event.js Person.js PeopleAtEvents.js
+    } > "${LocalFile}"
+}
+
+
+
+# cmd_addcr [ FILE ]
+# add CR to text files lines
+#
+cmd_addcr() {
+    awk '{ printf ("%s\r\n", $0); }' "${1:--}"
 }
 
 
